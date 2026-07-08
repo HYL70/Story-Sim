@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story-Sim 工作流全景图 v6</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,'Segoe UI','Noto Sans SC',sans-serif; background:#f5f3ef; color:#2c2c2a; line-height:1.7; font-size:14px; }
+.container { max-width:900px; margin:0 auto; padding:24px; }
+h1 { font-size:20px; font-weight:600; margin-bottom:4px; }
+h2 { font-size:16px; font-weight:600; margin:28px 0 10px; padding:6px 12px; background:#fff; border-left:3px solid #534ab7; border-radius:3px; }
+.subtitle { font-size:12px; color:#888780; margin-bottom:20px; }
+
+.node { background:white; border-radius:10px; border:0.5px solid #d3d1c7; margin:14px 0; overflow:hidden; }
+.node-h { display:flex; align-items:center; gap:10px; padding:12px 18px; cursor:pointer; user-select:none; transition:background 0.15s; }
+.node-h:hover { background:#f1efe8; }
+.node-id { width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:13px; flex-shrink:0; }
+.node-title { font-weight:600; font-size:14px; flex:1; }
+.node-tags { display:flex; gap:5px; flex-shrink:0; }
+.tag { font-size:10px; padding:1px 6px; border-radius:3px; background:#f1efe8; color:#5f5e5a; }
+.tag-llm { background:#e6f1fb; color:#185fa5; }
+.tag-rule { background:#e1f5ee; color:#0f6e56; }
+.node-body { padding:0 18px 18px; display:none; }
+.node-body.open { display:block; }
+.chevron { transition:transform 0.2s; font-size:11px; color:#888780; }
+.chevron.open { transform:rotate(90deg); }
+
+.section { margin:12px 0; }
+.s-label { font-size:11px; font-weight:600; color:#888780; text-transform:uppercase; letter-spacing:0.3px; margin-bottom:6px; }
+
+.io-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.io { padding:8px 12px; border-radius:6px; font-size:12px; }
+.io.in { background:#e1f5ee; border-left:3px solid #0f6e56; }
+.io.out { background:#e6f1fb; border-left:3px solid #185fa5; }
+.io-l { font-weight:600; font-size:10px; margin-bottom:2px; }
+
+.logic-steps { counter-reset:step; }
+.logic-step {
+  counter-increment:step; padding:6px 6px 6px 36px; position:relative;
+  font-size:12px; border-left:1px solid #e1efe8; margin-left:12px;
+}
+.logic-step::before {
+  content:counter(step); position:absolute; left:-11px; top:6px;
+  width:20px; height:20px; border-radius:50%; background:#eeedfe;
+  color:#534ab7; display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:500;
+}
+
+.prompt-box {
+  background:#1a1a1a; color:#d3d1c7; border-radius:6px; padding:12px 14px;
+  font-family:'Cascadia Code',monospace; font-size:11px; line-height:1.7;
+  white-space:pre-wrap; max-height:450px; overflow-y:auto; margin:6px 0;
+}
+
+.code { background:#f1efe8; padding:1px 5px; border-radius:2px; font-family:'Cascadia Code',monospace; font-size:11px; color:#534ab7; }
+
+table.data { width:100%; border-collapse:collapse; font-size:12px; margin:6px 0; }
+table.data th { text-align:left; padding:5px 8px; background:#f1efe8; font-weight:600; font-size:11px; }
+table.data td { padding:5px 8px; border-bottom:0.5px solid #e1efe8; }
+
+.flow-svg { width:100%; margin:12px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Story-Sim 工作流全景图 <span style="font-size:12px;color:#888780;font-weight:400;">v6 — 2026-06-02 (简化版)</span></h1>
+<p class="subtitle">事件调度 → 角色决策 → 世界模拟 → 叙事编排 | 三组件已移除: 弧状态机 / 伏笔 buffer / auto_event</p>
+
+<!-- ===== 拓扑 ===== -->
+<h2>主流程拓扑</h2>
+<svg viewBox="0 0 900 600" class="flow-svg">
+<defs>
+  <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerW="6" markerH="6" orient="auto"><path d="M2 2L7 5L2 8" fill="none" stroke="#888780" stroke-width="1.5" stroke-linecap="round"/></marker>
+  <marker id="ar-p" viewBox="0 0 10 10" refX="8" refY="5" markerW="6" markerH="6" orient="auto"><path d="M2 2L7 5L2 8" fill="none" stroke="#534ab7" stroke-width="1.5" stroke-linecap="round"/></marker>
+</defs>
+<rect x="310" y="10" width="240" height="40" rx="8" fill="#eeedfe" stroke="#534ab7" stroke-width="1"/>
+<text x="430" y="35" text-anchor="middle" font-size="14" font-weight="600" fill="#3c3489">故事初始化</text>
+<line x1="430" y1="50" x2="430" y2="76" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>
+
+<rect x="310" y="78" width="240" height="40" rx="8" fill="#e1f5ee" stroke="#0f6e56" stroke-width="1"/>
+<text x="430" y="103" text-anchor="middle" font-size="14" font-weight="600" fill="#04342c">日程初始化</text>
+<line x1="430" y1="118" x2="430" y2="146" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>
+
+<rect x="290" y="148" width="280" height="44" rx="8" fill="#faeeda" stroke="#854f0b" stroke-width="1"/>
+<text x="430" y="168" text-anchor="middle" font-size="9" fill="#854f0b">Step 1 | 纯规则</text>
+<text x="430" y="183" text-anchor="middle" font-size="13" font-weight="600" fill="#412402">世界时钟 + Occupancy</text>
+<line x1="430" y1="192" x2="430" y2="218" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>
+
+<rect x="290" y="220" width="280" height="44" rx="8" fill="#e6f1fb" stroke="#185fa5" stroke-width="1"/>
+<text x="430" y="240" text-anchor="middle" font-size="9" fill="#185fa5">Step 2 | LLM xN 并行</text>
+<text x="430" y="255" text-anchor="middle" font-size="13" font-weight="600" fill="#042c53">角色意图生成</text>
+<line x1="430" y1="264" x2="430" y2="290" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>
+
+<rect x="290" y="292" width="280" height="44" rx="8" fill="#e1f5ee" stroke="#0f6e56" stroke-width="1"/>
+<text x="430" y="312" text-anchor="middle" font-size="9" fill="#0f6e56">Step 3 | 规则 + LLM</text>
+<text x="430" y="327" text-anchor="middle" font-size="13" font-weight="600" fill="#04342c">世界模拟</text>
+
+<line x1="370" y1="336" x2="200" y2="356" stroke="#b4b2a9" stroke-width="0.8"/>
+<line x1="490" y1="336" x2="580" y2="356" stroke="#b4b2a9" stroke-width="0.8"/>
+
+<rect x="100" y="358" width="200" height="30" rx="5" fill="#f1efe8" stroke="#b4b2a9" stroke-width="0.5"/>
+<text x="200" y="377" text-anchor="middle" font-size="11" fill="#444441">碰撞检测 + 意图校验</text>
+<rect x="480" y="358" width="200" height="30" rx="5" fill="#f1efe8" stroke="#b4b2a9" stroke-width="0.5"/>
+<text x="580" y="377" text-anchor="middle" font-size="11" fill="#444441">对话生成 + 关系Δ</text>
+
+<line x1="430" y1="388" x2="430" y2="412" stroke="#888780" stroke-width="1" marker-end="url(#ar)"/>
+
+<rect x="290" y="414" width="280" height="44" rx="8" fill="#e6f1fb" stroke="#185fa5" stroke-width="1"/>
+<text x="430" y="434" text-anchor="middle" font-size="9" fill="#185fa5">Step 4 | 纯规则</text>
+<text x="430" y="449" text-anchor="middle" font-size="13" font-weight="600" fill="#042c53">状态更新 + 记忆 + skip判定</text>
+
+<path d="M430,458 L430,472 L250,472 Q240,472 240,482 L240,496" stroke="#888780" stroke-width="1" fill="none" marker-end="url(#ar)"/>
+<path d="M430,458 L430,472 L610,472 Q620,472 620,482 L620,496" stroke="#888780" stroke-width="1" fill="none" marker-end="url(#ar)"/>
+
+<rect x="80" y="498" width="320" height="40" rx="8" fill="#eeedfe" stroke="#534ab7" stroke-width="1"/>
+<text x="240" y="523" text-anchor="middle" font-size="13" font-weight="600" fill="#3c3489">Step 5: 叙事编排 (LLM)</text>
+
+<rect x="500" y="498" width="120" height="40" rx="8" fill="#f1efe8" stroke="#b4b2a9" stroke-width="0.8"/>
+<text x="560" y="523" text-anchor="middle" font-size="12" fill="#444441">反思 (全量)</text>
+
+<path d="M240,538 L240,554 Q240,564 250,564 L610,564 Q620,564 620,554 L620,160 Q620,148 610,148 L580,148" fill="none" stroke="#534ab7" stroke-width="1.2" stroke-dasharray="6,4" marker-end="url(#ar-p)"/>
+<text x="430" y="580" text-anchor="middle" font-size="9" fill="#534ab7">循环: 更新个人时间表 → Step 1</text>
+</svg>
+
+<!-- ===== Step 1 ===== -->
+<h2>Step 1: 世界时钟 + Occupancy</h2>
+<div class="node">
+<div class="node-h" onclick="toggle('n1')"><span class="node-id" style="background:#faeeda;color:#854f0b;">1</span><span class="node-title">_get_next_world_time() + Occupancy Model</span><div class="node-tags"><span class="tag tag-rule">纯规则</span></div><span class="chevron" id="chev-n1">&#9654;</span></div>
+<div class="node-body open" id="n1">
+<div class="logic-steps">
+<div class="logic-step">取所有角色 personal_schedule[0] 的最早时间点 → 世界时钟</div>
+<div class="logic-step">精确匹配 day/hour/minute → 活跃角色列表</div>
+<div class="logic-step">弹出事件（丢弃同角色同时刻的重复事件），返回 {cid: {description, duration, importance}}</div>
+<div class="logic-step">清理过期 Occupancy → 写入新占用（busy_until = 当前时间 + duration, locked_location 由 activity 关键词推断）</div>
+<div class="logic-step">过期占用角色自动写入"自由活动"事件，时间 clamp 到当前世界时钟</div>
+</div>
+</div></div>
+
+<!-- ===== Step 2 ===== -->
+<h2>Step 2: 角色意图生成</h2>
+<div class="node">
+<div class="node-h" onclick="toggle('n2')"><span class="node-id" style="background:#e6f1fb;color:#185fa5;">2</span><span class="node-title">_generate_character_intent()</span><div class="node-tags"><span class="tag tag-llm">LLM xN</span><span class="tag tag-async" style="background:#faeeda;color:#854f0b;">async</span></div><span class="chevron" id="chev-n2">&#9654;</span></div>
+<div class="node-body open" id="n2">
+<div class="logic-steps">
+<div class="logic-step">占用角色跳过 LLM，用 locked_location + activity 占位（importance 截断为 6）</div>
+<div class="logic-step">记忆检索：_extract_query_keywords() 从 location/mood/actions/contacts/plan 提取关键词，检索 5 条</div>
+<div class="logic-step">构建 Scratchpad + 关系摘要 + affected_events 差异化上下文</div>
+<div class="logic-step">LLM 并行调用（async with Semaphore(6)），json_mode=True，null 防御清洗</div>
+<div class="logic-step">next_event 写入 personal_schedule：绝对时间 + 防倒退校验 + 总分钟数跨日判断</div>
+</div>
+<div class="section"><div class="s-label">Prompt</div>
+<div class="prompt-box">System: 角色模拟器，根据设定/情境/记忆/关系/事件/弧光决定意图
+- destination 约束为标准地点列表 (18个)
+- next_event 时间: {"next_event_day": N, "next_event_hour": H, "next_event_minute": M}
+User: 请按照要求输出 JSON。next_event 使用绝对时间，必须晚于当前时间。</div></div>
+</div></div>
+
+<!-- ===== Step 3 ===== -->
+<h2>Step 3: 世界模拟</h2>
+<div class="node">
+<div class="node-h" onclick="toggle('n3')"><span class="node-id" style="background:#e1f5ee;color:#0f6e56;">3</span><span class="node-title">detect_encounters() + generate_dialogue()</span><div class="node-tags"><span class="tag tag-rule">碰撞:规则</span><span class="tag tag-llm">对话:LLM</span></div><span class="chevron" id="chev-n3">&#9654;</span></div>
+<div class="node-body open" id="n3">
+<div class="logic-steps">
+<div class="logic-step">按 destination 分组（含非活跃角色：同位置的 character_states 也纳入）</div>
+<div class="logic-step">意图交叉校验："找/见/等/约 + 角色名" → 目标不在同地 → 标记失败 + 降级 importance</div>
+<div class="logic-step">关系阈值判定：trust>70/affection>70/trust<30/affection<30 → DIALOGUE；trust≥40/affection≥40 → OBSERVATION；其他 → PASSING</div>
+<div class="logic-step">DIALOGUE 调用 LLM 生成对话（并行），输出 dialogue + outcome + relationship_delta</div>
+<div class="logic-step">显式检查 gather 结果，异常记录 error + 兜底 outcome</div>
+</div>
+<div class="section"><div class="s-label">关系Δ</div>
+<p style="font-size:12px">dialogue_data 存入 Encounter 模型字段；relationship_delta 缺失时从 outcome 启发式推断（正面词→+2~3, 负面词→-3~-2）；Step 4 中调用 <span class="code">relationship.update_relationship()</span> 应用增量</p></div>
+</div></div>
+
+<!-- ===== Step 4 ===== -->
+<h2>Step 4: 状态更新 + Skip 判定</h2>
+<div class="node">
+<div class="node-h" onclick="toggle('n4')"><span class="node-id" style="background:#e6f1fb;color:#185fa5;">4</span><span class="node-title">update + memory + skip</span><div class="node-tags"><span class="tag tag-rule">纯规则</span></div><span class="chevron" id="chev-n4">&#9654;</span></div>
+<div class="node-body open" id="n4">
+<div class="logic-steps">
+<div class="logic-step">遍历 active_interactions：更新 last_action/location/mood/condition，拼接记忆描述</div>
+<div class="logic-step">应用 relationship_delta：遍历 dialogue_encounters → update_relationship(trust_delta, affection_delta)</div>
+<div class="logic-step">记忆写入：加权评分淘汰（importance×10 + step×0.5 + reflection_bonus 30）</div>
+</div>
+<div class="section"><div class="s-label">Skip 判定（简化）</div>
+<p style="font-size:12px"><span class="code">max_importance < 4 AND !has_encounters AND !has_world_events AND consecutive_skipped < 5 → skip</span>。仅统计活跃角色参与的碰撞。skip 时仍写入 timeline（标记 skipped=True）和 world_snapshot，但不生成叙事。</p></div>
+</div></div>
+
+<!-- ===== Step 5 ===== -->
+<h2>Step 5: 叙事编排</h2>
+<div class="node">
+<div class="node-h" onclick="toggle('n5')"><span class="node-id" style="background:#eeedfe;color:#534ab7;">5</span><span class="node-title">_generate_narrative_with_foreshadowing()</span><div class="node-tags"><span class="tag tag-llm">LLM</span></div><span class="chevron" id="chev-n5">&#9654;</span></div>
+<div class="node-body open" id="n5">
+<div class="logic-steps">
+<div class="logic-step">故事摘要：最近 20 步叙事，每条截 150 字</div>
+<div class="logic-step">角色卡构建 + 场景分组 + 时间线指导（同一 LLM 调用，全局视角）</div>
+<div class="logic-step">LLM 生成叙事 + narrative_step_count 递增</div>
+</div>
+<div class="section"><div class="s-label">Prompt 规则</div>
+<p style="font-size:12px">人设硬约束(fear/secret/background不可违反) | 去重(相似场景聚焦新细节) | telepathy区分(脑内传音用破折号/叙事标记) | 同时性(相邻场景合并/视角切换)</p></div>
+</div></div>
+
+<!-- ===== Node R ===== -->
+<h2>反思机制</h2>
+<div class="node">
+<div class="node-h" onclick="toggle('nr')"><span class="node-id" style="background:#f1efe8;color:#444441;">R</span><span class="node-title">_run_reflections()</span><div class="node-tags"><span class="tag tag-llm">LLM xN</span></div><span class="chevron" id="chev-nr">&#9654;</span></div>
+<div class="node-body open" id="nr">
+<div class="logic-steps">
+<div class="logic-step">narrative_step_count % 3 == 0 时触发</div>
+<div class="logic-step">取最近 6 步非反思记忆 → LLM 生成洞察</div>
+<div class="logic-step">覆盖所有角色（非仅活跃），反思记忆 importance floor=7</div>
+</div>
+</div></div>
+
+<!-- ===== 数据流 ===== -->
+<h2>数据流总览</h2>
+<table class="data">
+<tr><th>数据结构</th><th>读写时机</th><th>消费者</th></tr>
+<tr><td><code>personal_schedule</code></td><td>init / Step 2 intent</td><td>Step 1 世界时钟</td></tr>
+<tr><td><code>memories[cid]</code></td><td>Step 4 / 反思 / 旁观</td><td>Step 2 记忆检索</td></tr>
+<tr><td><code>relationships</code></td><td>init / Step 4 关系Δ</td><td>Step 2 关系摘要 / Step 3 碰撞</td></tr>
+<tr><td><code>occupancy</code></td><td>Step 1 写入/清理</td><td>Step 2 占用跳过</td></tr>
+<tr><td><code>timeline</code></td><td>每步末尾</td><td>story_summary / 前端展示</td></tr>
+<tr><td><code>narrative_step_count</code></td><td>有叙事时递增</td><td>反思触发器</td></tr>
+<tr><td><code>active_world_events</code></td><td>玩家干预 / 系统判定</td><td>Step 2 affected_events / Step 3 上下文</td></tr>
+</table>
+
+<!-- ===== Config ===== -->
+<h2>关键配置</h2>
+<table class="data">
+<tr><th>参数</th><th>值</th><th>用途</th></tr>
+<tr><td><code>DEFAULT_START_HOUR</code></td><td>8</td><td>默认起始时间</td></tr>
+<tr><td><code>NARRATIVE_IMPORTANCE_THRESHOLD</code></td><td>4</td><td>低于此值可 skip</td></tr>
+<tr><td><code>MAX_SKIPPED_STEPS</code></td><td>5</td><td>连续跳过上限</td></tr>
+<tr><td><code>ENCOUNTER_EXTREME_THRESHOLD</code></td><td>70</td><td>极端关系→对话</td></tr>
+<tr><td><code>ENCOUNTER_PASSING_THRESHOLD</code></td><td>40</td><td>弱关系→擦肩</td></tr>
+<tr><td><code>REFLECTION_INTERVAL</code></td><td>3</td><td>反思间隔（叙事步）</td></tr>
+<tr><td><code>MAX_MEMORIES_PER_CHARACTER</code></td><td>100</td><td>记忆上限</td></tr>
+<tr><td><code>STORY_SUMMARY_MAX_STEPS</code></td><td>20</td><td>叙事摘要最大步数</td></tr>
+<tr><td><code>LOCATIONS_DEFAULT</code></td><td>18个</td><td>标准化地点</td></tr>
+<tr><td><code>ANTI_REVERSE_MIN_MINUTES</code></td><td>5</td><td>防倒退最小偏移</td></tr>
+</table>
+
+</div>
+<script>
+function toggle(id){var b=document.getElementById(id);var c=document.getElementById('chev-'+id);b.classList.toggle('open');c.classList.toggle('open');}
+document.querySelectorAll('.node-body').forEach(function(e){e.classList.add('open');});
+document.querySelectorAll('.chevron').forEach(function(e){e.classList.add('open');});
+</script>
+</body>
+</html>

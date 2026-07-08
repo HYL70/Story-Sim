@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skip 失效根因分析</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; background: #f8f7f4; color: #2c2c2a; line-height: 1.75; font-size: 14px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; color: #1a1a1a; }
+h2 { font-size: 17px; font-weight: 600; margin: 32px 0 14px; padding: 8px 14px; background: #fff; border-left: 4px solid #534ab7; border-radius: 4px; }
+h3 { font-size: 14px; font-weight: 600; margin: 20px 0 8px; color: #3c3489; }
+.subtitle { font-size: 12px; color: #888780; margin-bottom: 20px; }
+
+.chain-box {
+  background: #fef4f0;
+  border: 0.5px solid #e8c96a;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 12px 0;
+}
+.chain-box h4 { margin: 0 0 10px; color: #993c1d; font-size: 14px; }
+.chain-arrow { 
+  display: inline-block; 
+  margin: 0 4px; 
+  color: #d85a30; 
+  font-weight: 600; 
+  font-size: 16px;
+}
+.chain-step { 
+  display: inline-block;
+  background: white;
+  border: 0.5px solid #d3d1c7;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.evidence-card {
+  background: white;
+  border-radius: 10px;
+  border: 0.5px solid #d3d1c7;
+  padding: 16px;
+  margin: 12px 0;
+}
+.evidence-card h4 { margin-bottom: 8px; font-size: 13px; color: #3c3489; }
+.evidence-card table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.evidence-card th { text-align: left; padding: 5px 8px; background: #f1efe8; font-weight: 600; font-size: 11px; border-bottom: 0.5px solid #d3d1c7; }
+.evidence-card td { padding: 5px 8px; border-bottom: 0.5px solid #e8e6df; vertical-align: top; font-size: 11px; }
+.evidence-card tr:hover td { background: #faf9f6; }
+
+.tag-high { background: #fbeaf0; color: #993556; font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+.tag-bug { background: #faece7; color: #993c1d; font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+.tag-note { background: #e1f5ee; color: #0f6e56; font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+
+.code-snippet {
+  background: #1a1a1a; color: #d3d1c7; border-radius: 8px; 
+  padding: 12px 16px; font-family: 'Cascadia Code', monospace; font-size: 12px;
+  line-height: 1.8; margin: 6px 0; overflow-x: auto;
+}
+.code-snippet .kw { color: #7f77dd; }
+.code-snippet .cm { color: #6d8a78; }
+.code-snippet .num { color: #d85a30; }
+.code-snippet .str { color: #e8c96a; }
+
+.fix-box {
+  background: #e1f5ee;
+  border-left: 3px solid #0f6e56;
+  border-radius: 0 8px 8px 0;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+.fix-box h4 { margin: 0 0 8px; color: #0f6e56; }
+.fix-box .recommended { background: #0f6e56; color: white; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
+
+.log-entry {
+  font-family: 'Cascadia Code', monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin: 2px 0;
+  line-height: 1.6;
+}
+.log-entry.cooldown { background: #fef4f0; border-left: 2px solid #d85a30; }
+.log-entry.normal { background: #faf9f6; border-left: 2px solid #b4b2a9; }
+.log-entry.skip { background: #e1f5ee; border-left: 2px solid #0f6e56; }
+
+.final-verdict {
+  background: #fef4f0;
+  border: 2px solid #d85a30;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin: 20px 0;
+}
+.final-verdict h3 { color: #993c1d; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Skip 失效根因分析</h1>
+<p class="subtitle">为什么 importance < 4 的日常步骤仍然没有 skip？结合 workflow-overview.html + debug.log + narrative_full.txt + 源码交叉验证</p>
+
+<!-- ============================================================ -->
+<h2>一、现象确认</h2>
+
+<div class="evidence-card">
+<h4>debug.log 全 6 步弧状态一览</h4>
+<table>
+<tr><th>步</th><th>时间</th><th>活跃角色</th><th>事件</th><th>意图来源</th><th>arc_state</th><th>叙事</th><th>耗时</th></tr>
+<tr>
+  <td>1</td><td>08:15</td><td>海藤瞬</td><td>偷偷观察走廊</td><td><span class="tag-bug">占位</span></td>
+  <td><span class="tag-high">→ cooldown</span></td><td>full 541字</td><td>5.3s</td>
+</tr>
+<tr>
+  <td>2</td><td>08:30</td><td>照桥心美</td><td>整理书籍</td><td><span class="tag-bug">占位</span></td>
+  <td><span class="tag-high">cooldown</span></td><td>full 782字</td><td>5.8s</td>
+</tr>
+<tr>
+  <td>3</td><td>09:00</td><td>海藤瞬</td><td>上课画符号</td><td><span class="tag-bug">占位</span></td>
+  <td><span class="tag-high">cooldown</span></td><td>full 635字</td><td>9.7s</td>
+</tr>
+<tr>
+  <td>4</td><td>09:01</td><td>海藤瞬</td><td>自由活动(N2)</td><td><span class="tag-note">占位 imp=3</span></td>
+  <td>check→normal</td><td>light 17字*</td><td>5.7s</td>
+</tr>
+<tr style="outline: 2px solid #d85a30;">
+  <td>5</td><td>10:00</td><td>照桥心美</td><td>课间走廊漫步</td><td><span class="tag-bug">占位</span></td>
+  <td><span class="tag-high">→ cooldown</span></td><td>full 994字</td><td>8.4s</td>
+</tr>
+<tr>
+  <td>6</td><td>09:16 ⚠️</td><td>照桥心美</td><td>自由活动(N2)</td><td><span class="tag-note">占位 imp=3</span></td>
+  <td><span class="tag-high">cooldown</span></td><td>full 585字</td><td>10.9s</td>
+</tr>
+</table>
+<p style="font-size:11px; margin-top:6px; color:#888780;">* 步骤4叙事17字 — LLM 返回了完整 JSON 但 parse_json_response 解析失败，属于 N6 修复后的边缘 JSON 格式问题</p>
+</div>
+
+<p style="font-size:13px; margin-top:12px;">
+<b>关键发现：</b>6 步中有 5 步进入 cooldown（全量叙事），1 步 check→light。没有任何步骤触发 skip。其中步骤 1、2、3、5 的意图全是 <b>Occupancy 占位意图</b>（角色被占用，跳过 LLM）。步骤 5 的"课间走廊漫步"明显是 routine activity，但触发了 cooldown。
+</p>
+
+<!-- ============================================================ -->
+<h2>二、根因追溯链路</h2>
+
+<div class="chain-box">
+<h4>🔗 从"LLM 日程生成"到"cooldown 锁定"的 6 层传递链</h4>
+
+<div style="font-size:12px; margin:10px 0; line-height:2.2;">
+  <div style="margin:6px 0;">
+    <strong>第1层：LLM 日程生成</strong><br>
+    <span class="chain-step">_initialize_personal_schedules()</span>
+    <span class="chain-arrow">→</span>
+    LLM 为每个角色生成 3-5 个日程，自带 <span class="code-snippet" style="display:inline;padding:0 4px;">importance</span> 字段 (1-10)<br>
+    <span style="color:#888;font-size:11px;">源码：story_engine.py:798 prompt 示例值=5，但 LLM 实际可输出 1-10 任意值</span>
+  </div>
+
+  <div style="margin:6px 0;">
+    <strong>第2层：存入 PersonalEvent</strong><br>
+    <span class="chain-step">PersonalEvent(importance=imp)</span>
+    <span class="chain-arrow">→</span>
+    存入 <span class="code-snippet" style="display:inline;padding:0 4px;">state.personal_schedule</span><br>
+    <span style="color:#888;font-size:11px;">源码：story_engine.py:851 — imp = item.get("importance", 5)</span>
+  </div>
+
+  <div style="margin:6px 0;">
+    <strong>第3层：弹出事件 → 创建 Occupancy</strong><br>
+    <span class="chain-step">_pop_scheduled_events()</span>
+    <span class="chain-arrow">→</span>
+    scheduled_events[cid] = { ..., "importance": evt.importance }<br>
+    <span class="chain-arrow">→</span>
+    <span class="code-snippet" style="display:inline;padding:0 4px;">occupancy[cid] = {"importance": evt.get("importance", 5)}</span><br>
+    <span style="color:#888;font-size:11px;">源码：story_engine.py:234 — 原始 importance 原封不动透传</span>
+  </div>
+
+  <div style="margin:6px 0;">
+    <strong>第4层：占位意图继承 importance</strong><br>
+    <span class="chain-step">Occupancy 占位</span>
+    <span class="chain-arrow">→</span>
+    <span class="code-snippet" style="display:inline;padding:0 4px;">intents[cid] = {"importance": occ.get("importance", 5)}</span><br>
+    <span style="color:#888;font-size:11px;">源码：story_engine.py:326 — 跳过 LLM，直接使用 occupancy 中的 importance</span>
+  </div>
+
+  <div style="margin:6px 0;">
+    <strong>第5层：max_importance 计算</strong><br>
+    <span class="chain-step">build_interactions()</span>
+    <span class="chain-arrow">→</span>
+    <span class="code-snippet" style="display:inline;padding:0 4px;">max_importance = max(ia.importance for ia in active_interactions)</span><br>
+    <span style="color:#888;font-size:11px;">源码：story_engine.py:449 — 占位意图的 importance 作为正常值参与 max</span>
+  </div>
+
+  <div style="margin:6px 0; padding:8px; background:#fef4f0; border-radius:6px;">
+    <strong>第6层：cooldown 触发 → skip 不可能</strong><br>
+    <span class="chain-step">max_importance ≥ ARC_HIGH_IMPORTANCE (7)</span>
+    <span class="chain-arrow">→</span>
+    <span style="font-weight:600;color:#993c1d;">arc_state = "cooldown"</span>
+    <span class="chain-arrow">→</span>
+    narrative_mode = "full" (持续 3 步)<br>
+    <span class="chain-arrow">→</span>
+    <span style="font-weight:600;color:#d85a30;">skip 绝不可能触发</span><br>
+    <span style="color:#888;font-size:11px;">源码：story_engine.py:460,474 — cooldown 无条件 full 叙事</span>
+  </div>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>三、为什么 LLM 会把低重要性活动赋高分？</h2>
+
+<div class="evidence-card">
+<h4>日程初始化 prompt 分析</h4>
+<div class="code-snippet">
+<span class="cm"># story_engine.py:796-808 — 日程生成 prompt</span>
+{{"schedule": [
+  {{"hour": {<span class="num">base_hour + 2</span>}, "minute": <span class="num">30</span>, "duration": <span class="num">60</span>, "description": <span class="str">"what to do"</span>, <span class="str">"importance": 5</span>}},
+  {{"hour": {<span class="num">base_hour + 4</span>}, "minute": <span class="num">0</span>, "duration": <span class="num">90</span>, "description": <span class="str">"what to do"</span>, <span class="str">"importance": 4</span>}}
+]}}
+...
+- <span class="str">importance: 1-10</span>
+</div>
+<p style="font-size:12px; margin-top:6px;">
+<b>问题：</b>prompt 中 importance 的示例值是 5 和 4，但提示文字只说 "1-10"——没有任何指导规则告诉 LLM 如何区分"routine"和"significant"。LLM 从角色设定推断：<b>"照桥心美认为自己的每一个举动都很重要"</b> → 给所有活动赋高分。这是合理的 LLM 推理，但不符合系统的设计意图：routine 活动应该是 importance 3-5，只有真正的情节转折才应在 7+。
+</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>四、为什么这个问题特别严重？</h2>
+
+<div class="evidence-card">
+<h4>cooldown 路径上的迭代循环</h4>
+
+<div style="font-size:12px; line-height:1.9;">
+<p>一旦一个角色的 routine 活动触发 cooldown → <b>连续 3 步全部 full 叙事</b>。3 步后进入 check → 回到 normal → <b>但下一个活跃角色可能又是一个 routine 活动</b> → 再次触发 cooldown → 又 3 步 full 叙事。</p>
+
+<p style="margin-top:8px;">结果：<b>系统大约 75% 的步骤都在 cooldown 状态中</b>（3 cooldown → 1 check → 3 cooldown ...）。normal 状态只在 check→normal 的那一瞬间存在，几乎立即被下一次 cooldown 覆盖。</p>
+
+<div style="background:#faf9f6; padding:10px 14px; border-radius:6px; margin-top:8px; font-family:'Cascadia Code',monospace; font-size:11px;">
+  <span class="log-entry cooldown">Step1 08:15 [cooldown →] 高压事件！进入 cooldown  ← LLM schedule imp≥7</span>
+  <span class="log-entry cooldown">Step2 08:30 [cooldown ×] cooldown 期间，完整叙事</span>
+  <span class="log-entry cooldown">Step3 09:00 [cooldown ×] cooldown 期间，完整叙事</span>
+  <span class="log-entry normal">Step4 09:01 [check → normal] Type A 轻量叙事      ← N2 事件 imp=3</span>
+  <span class="log-entry cooldown">Step5 10:00 [normal → cooldown] 高压事件！进入 cooldown ← LLM schedule imp≥7</span>
+  <span class="log-entry cooldown">Step6 09:16 [cooldown ×] cooldown 期间，完整叙事    ⚠️ 时间倒退！</span>
+</div>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>五、附：时间倒退问题（Step 6 @ 09:16 在 Step 5 @ 10:00 之后）</h2>
+
+<div class="chain-box" style="background:#faf9f6; border-color:#d3d1c7;">
+<h4 style="color:#854f0b;">N2 自动事件写入"过去时间"导致时间倒退</h4>
+<div style="font-size:12px; line-height:1.9;">
+
+<p>Steps 2-4 中 照桥心美 处于占用状态 (08:30 → 09:15)，期间未激活。到 Step 5 世界时钟推进到 10:00 时，照桥心美的占用清理才触发：</p>
+
+<div class="code-snippet">
+<span class="cm"># story_engine.py:204-214 — overhead delay 效应</span>
+<span class="kw">for</span> cid <span class="kw">in</span> expired:
+    busy_until = occ.get(<span class="str">"busy_until"</span>)       <span class="cm"># = (1, 9, 15)</span>
+    state.personal_schedule.append(PersonalEvent(
+        day=busy_until[<span class="num">0</span>],                     <span class="cm"># = 1</span>
+        hour=busy_until[<span class="num">1</span>],                    <span class="cm"># = 9</span>
+        minute=min(busy_until[<span class="num">2</span>] + <span class="num">1</span>, <span class="num">59</span>),  <span class="cm"># = 16  ← 09:16 已被世界时钟超越！</span>
+        ...
+    ))
+</div>
+
+<p style="margin-top:6px;"><b>问题：</b>N2 事件写入 (1, 9, 16)，但世界时钟已是 (1, 10, 0)。下一步 _get_next_world_time 找到最小时间 (1,9,16) → <b>时间倒退 44 分钟</b>。这导致 照桥心美 在"过去时间"再做一次"自由活动"，而实际已经发生了 10:00 的课间漫步。</p>
+
+<p style="margin-top:4px;"><b>正确做法：</b>N2 写入时应 <span class="code-snippet" style="display:inline;padding:0 4px;">max(busy_until 后 1 分钟, 当前世界时钟)</span>，防止写入过去时间。</p>
+
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>六、修复方案</h2>
+
+<div class="fix-box">
+<h4>主修复：截断 Occupancy 占位意图的 importance <span class="recommended">推荐</span></h4>
+<p style="font-size:12px;"><b>位置：</b>story_engine.py:326</p>
+<p style="font-size:12px;"><b>原理：</b>Occupancy 占位意图代表"角色正在做预定的事"，不是"角色主动做出的戏剧性决定"。routine 活动不应该触发 cooldown。</p>
+
+<div class="code-snippet">
+<span class="cm"># 当前代码 (line 326)</span>
+imp = occ.get(<span class="str">"importance"</span>, <span class="num">5</span>)
+
+<span class="cm"># 修复方案A（最小改动）：cap 到 6，确保不触发 cooldown</span>
+imp = min(occ.get(<span class="str">"importance"</span>, <span class="num">5</span>), <span class="num">6</span>)
+
+<span class="cm"># 修复方案B（语义更正确）：默认给占位意图固定低值</span>
+imp = <span class="num">3</span>    <span class="cm"># routine 活动的固有重要性</span>
+</div>
+<p style="font-size:11px; margin-top:6px; color:#854f0b;"><b>推荐方案A：</b>cap 到 6 比直接固定 3 更温和——保留了"某些 scheduled event 确实比其他 routine 更重要"的信息（imp=4 vs imp=6 仍有差异），但确保不会跨越 ARC_HIGH_IMPORTANCE=7 的 cooldown 阈值。</p>
+</div>
+
+<div class="fix-box" style="background:#fdfaee; border-left-color:#e8c96a;">
+<h4 style="color:#854f0b;">副修复1：日程生成 prompt 明确 importance 语义</h4>
+<p style="font-size:12px;"><b>位置：</b>story_engine.py:807</p>
+<p style="font-size:12px;"><b>当前：</b><code>importance: 1-10</code></p>
+<p style="font-size:12px;"><b>改为：</b></p>
+<div class="code-snippet">
+importance: <span class="num">1</span>-<span class="num">10</span> (<span class="num">1</span>-<span class="num">3</span>=trivial, <span class="num">4</span>-<span class="num">6</span>=routine, <span class="num">7</span>-<span class="num">9</span>=significant event, <span class="num">10</span>=life-changing)
+Most daily activities should be <span class="num">3</span>-<span class="num">5</span>. Only give <span class="num">7</span>+ if this activity
+represents a major plot point or emotional turning point.
+</div>
+</div>
+
+<div class="fix-box" style="background:#fdfaee; border-left-color:#e8c96a;">
+<h4 style="color:#854f0b;">副修复2：N2 时间倒退防御</h4>
+<p style="font-size:12px;"><b>位置：</b>story_engine.py:206-209</p>
+<p style="font-size:12px;"><b>当前：</b>N2 写入 <code>busy_until + 1 minute</code>（可能已过去）</p>
+<div class="code-snippet">
+<span class="cm"># 修复：N2 写入时间不小于当前世界时钟</span>
+n2_minute = busy_until[<span class="num">2</span>] + <span class="num">1</span>
+n2_hour = busy_until[<span class="num">1</span>] + n2_minute // <span class="num">60</span>
+n2_day = busy_until[<span class="num">0</span>] + n2_hour // <span class="num">24</span>
+n2_minute = n2_minute % <span class="num">60</span>
+n2_hour = n2_hour % <span class="num">24</span>
+
+<span class="cm"># 确保不早于当前世界时钟</span>
+n2_total = n2_day * <span class="num">1440</span> + n2_hour * <span class="num">60</span> + n2_minute
+current_total = day * <span class="num">1440</span> + hour * <span class="num">60</span> + minute + <span class="num">1</span>
+<span class="kw">if</span> n2_total &lt; current_total:
+    n2_day, n2_hour, n2_minute = day, hour, minute + <span class="num">1</span>
+    <span class="kw">if</span> n2_minute >= <span class="num">60</span>:
+        n2_hour += <span class="num">1</span>; n2_minute = <span class="num">0</span>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>七、总结</h2>
+
+<div class="final-verdict">
+<h3>结论</h3>
+<p style="font-size:13px;">
+<b>Skip 完全不生效的根本原因：</b>LLM 在日程初始化时给 routine 活动赋予了 importance ≥ 7。这个值通过 6 层传递链（PersonalEvent → _pop → occupancy → 占位意图 → max_importance → arc_state）最终触发 cooldown。cooldown 状态下 skip 不可能发生。
+</p>
+<p style="font-size:13px; margin-top:8px;">
+<b>核心修复（line 326，1 行改动）：</b><code>imp = min(occ.get("importance", 5), 6)</code> —— 截断到 6，确保 routine 活动不越过 ARC_HIGH_IMPORTANCE=7 的阈值。
+配合日程 prompt 中的 importance 语义说明，可以从源头减少 LLM 赋高分的概率。
+</p>
+<p style="font-size:13px; margin-top:8px;">
+<b>时间倒退是独立问题：</b>N2 自动事件在 occupancy 清理时机与角色"错过激活窗口"叠加时，会写入过去时间。修复方案与原修复逻辑不冲突，可独立处理。
+</p>
+</div>
+
+</div>
+</body>
+</html>

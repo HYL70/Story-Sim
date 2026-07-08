@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story-Sim 第三轮综合审计报告 — 修复确认 + 残留问题</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; background: #f5f3ef; color: #2c2c2a; line-height: 1.7; font-size: 14px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; color: #1a1a1a; }
+.subtitle { font-size: 13px; color: #888780; margin-bottom: 20px; }
+h2 { font-size: 18px; font-weight: 500; margin: 28px 0 12px; color: #2c2c2a; border-left: 3px solid #534ab7; padding-left: 12px; }
+
+.summary-row { display: flex; gap: 12px; margin: 16px 0 24px; flex-wrap: wrap; }
+.summary-badge { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+.badge-green { background: #e1f5ee; color: #0f6e56; }
+.badge-red { background: #fbeaf0; color: #993556; }
+.badge-amber { background: #faeeda; color: #854f0b; }
+.badge-blue { background: #e6f1fb; color: #185fa5; }
+
+.fix-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+.fix-table th { text-align: left; padding: 8px 12px; background: #f1efe8; font-weight: 500; font-size: 12px; }
+.fix-table td { padding: 8px 12px; border-bottom: 0.5px solid #d3d1c7; vertical-align: top; font-size: 12px; }
+.fix-table tr:hover td { background: #faf9f6; }
+.fix-table .fix-ok { color: #0f6e56; font-weight: 600; }
+.fix-table .fix-no { color: #993556; font-weight: 600; }
+.fix-table .fix-note { color: #854f0b; }
+.fix-table .issue-id { font-weight: 500; font-size: 11px; white-space: nowrap; }
+
+.meta-note { background: #eeedfe; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; font-size: 13px; line-height: 1.8; border-left: 3px solid #534ab7; }
+.meta-note strong { color: #3c3489; }
+
+.issue-card { background: white; border-radius: 12px; border: 0.5px solid #d3d1c7; margin: 16px 0; overflow: hidden; }
+.issue-header { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px; cursor: pointer; user-select: none; transition: background 0.15s; }
+.issue-header:hover { background: #f1efe8; }
+.severity-tag { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.5px; }
+.sev-p0 { background: #fbeaf0; color: #4b1528; }
+.sev-p1 { background: #faece7; color: #4a1b0c; }
+.sev-p2 { background: #faeeda; color: #412402; }
+.sev-info { background: #e6f1fb; color: #185fa5; }
+.sev-note { background: #e1f5ee; color: #0f6e56; }
+.sev-new { background: #eeedfe; color: #534ab7; }
+.issue-title-group { flex: 1; }
+.issue-title { font-weight: 500; font-size: 15px; }
+.issue-loc { font-size: 11px; color: #888780; margin-top: 2px; }
+.issue-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+.issue-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #f1efe8; color: #5f5e5a; }
+.issue-tag-new { background: #eeedfe; color: #534ab7; font-weight: 500; }
+.issue-body { padding: 0 20px 20px; display: none; }
+.issue-body.open { display: block; }
+.chevron { transition: transform 0.2s; font-size: 12px; color: #888780; flex-shrink: 0; }
+.chevron.open { transform: rotate(90deg); }
+
+.problem-block, .solution-block, .evidence-block, .fix-block { margin: 12px 0; }
+.block-label { font-size: 11px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+.problem-block .block-label { color: #993c1d; }
+.solution-block .block-label { color: #0f6e56; }
+.evidence-block .block-label { color: #534ab7; }
+.fix-block .block-label { color: #0f6e56; }
+
+.problem-text, .solution-text, .evidence-text, .fix-text {
+  padding: 12px 16px; border-radius: 8px; font-size: 13px; line-height: 1.8;
+}
+.problem-text { background: #faece7; border-left: 3px solid #993c1d; }
+.solution-text { background: #e1f5ee; border-left: 3px solid #0f6e56; }
+.evidence-text { background: #f1efe8; border-left: 3px solid #534ab7; }
+.fix-text { background: #e1f5ee; border-left: 3px solid #0f6e56; }
+
+.code-inline { background: #f1efe8; padding: 1px 6px; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; color: #534ab7; }
+.code-block {
+  background: #1a1a1a; color: #d3d1c7; border-radius: 8px; padding: 14px 18px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px;
+  line-height: 1.8; white-space: pre-wrap; margin: 4px 0; overflow-x: auto;
+}
+.code-block .kw { color: #7f77dd; }
+.code-block .cm { color: #6d8a78; }
+.code-block .str { color: #d85a30; }
+.code-block .num { color: #bf9860; }
+
+.section-divider { border: none; border-top: 0.5px solid #d3d1c7; margin: 24px 0; }
+
+.rec-item {
+  padding: 12px 16px; border-radius: 8px; margin: 8px 0; font-size: 13px;
+}
+.rec-title { font-weight: 500; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Story-Sim 第三轮综合审计报告</h1>
+<p class="subtitle">全量代码交叉验证 | v1 审计 → v2 隐含问题 → 修复后 v3 确认 | 2026-06-01</p>
+
+<div class="summary-row">
+  <div class="summary-badge badge-green">✅ 已修复 7/9 项</div>
+  <div class="summary-badge badge-red">❌ 未修复 2 项</div>
+  <div class="summary-badge badge-amber">⏳ 遗留 1 项 (P2-10)</div>
+  <div class="summary-badge badge-blue">🔍 新发现 1 项</div>
+</div>
+
+<!-- ===== 方法论 ===== -->
+<div class="meta-note">
+  <strong>本报告定位：</strong>基于全部源码的第三轮逐行审查。覆盖 v1 audit（架构级）、v2 audit（代码级隐含问题）、以及v2中被修复部分的状态确认。N1-N7 已经过源码验证确认修复，N8/N9 尚未实现，P2-10 Token 膨胀继续延缓。<br>
+  <strong>审查范围：</strong>story_engine.py (1326行)、config.py、world_sim.py、memory.py、llm_client.py、全部 8 个 prompt 文件、schemas.py。
+</div>
+
+<!-- ===== 修复确认表 ===== -->
+<h2>一、v2 审计修复确认矩阵</h2>
+<table class="fix-table">
+<tr><th>ID</th><th>问题</th><th>状态</th><th>证据位置</th><th>备注</th></tr>
+
+<tr>
+  <td class="issue-id">N1</td>
+  <td>arc_state 局部变量与 state 快照不一致</td>
+  <td class="fix-ok">✅ 已修复</td>
+  <td>story_engine.py:449</td>
+  <td>叙事判定统一使用 <span class="code-inline">self.state.arc_state</span>，注释标注"N1 修复"</td>
+</tr>
+<tr>
+  <td class="issue-id">N2</td>
+  <td>占用角色无 next_event 导致空窗期</td>
+  <td class="fix-ok">✅ 已修复</td>
+  <td>story_engine.py:202-216</td>
+  <td>occupancy 过期清理后自动写入"自由活动"事件</td>
+</tr>
+<tr>
+  <td class="issue-id">N3</td>
+  <td>伏笔 buffer 消费为 FIFO 非语境匹配</td>
+  <td class="fix-ok">✅ 已修复</td>
+  <td>story_engine.py:620-630</td>
+  <td>改为 recency 倒序 (<span class="code-inline">-created_step</span>)，注释标注"N3: 按 recency 倒序消费"</td>
+</tr>
+<tr>
+  <td class="issue-id">N4</td>
+  <td>对话异常被 gather return_exceptions 静默吞没</td>
+  <td class="fix-ok">✅ 已修复</td>
+  <td>story_engine.py:372-377</td>
+  <td>显式检查 gather 结果，记录异常 + 兜底 outcome</td>
+</tr>
+<tr>
+  <td class="issue-id">N5</td>
+  <td>_pop_scheduled_events 遗留重复事件</td>
+  <td class="fix-ok">✅ 已修复</td>
+  <td>story_engine.py:724-743</td>
+  <td>重复事件直接丢弃（warning 日志），不保留在 schedule</td>
+</tr>
+<tr>
+  <td class="issue-id">N6</td>
+  <td>叙事 prompt 仅 system role</td>
+  <td class="fix-ok">✅ 已修复</td>
+  <td>全部 8 个 prompt 文件</td>
+  <td>narrative.py:160、character_action.py:143、world_sim.py:84、auto_event.py:58、conflict_resolve.py:69、world_event_judge.py:61、reflection.py:51、story_init.py:75 均已追加 user 消息</td>
+</tr>
+<tr>
+  <td class="issue-id">N7</td>
+  <td>跨日判断仅比较小时</td>
+  <td class="fix-ok">✅ 已修复</td>
+  <td>story_engine.py:800-807</td>
+  <td>改为 <span class="code-inline">target_total <= current_total</span>（总分钟数比较）</td>
+</tr>
+<tr>
+  <td class="issue-id">N8</td>
+  <td>无 LLM 并发控制</td>
+  <td class="fix-no">❌ 未修复</td>
+  <td>—</td>
+  <td>代码中无 Semaphore，workflow-analysis.html 中列为"方案阶段"</td>
+</tr>
+<tr>
+  <td class="issue-id">N9</td>
+  <td>add_player_event 双路径割裂</td>
+  <td class="fix-no">❌ 未修复</td>
+  <td>story_engine.py:1282-1301</td>
+  <td><span class="code-inline">hour is not None</span> 旧路径仍存在，写入所有角色 schedule</td>
+</tr>
+<tr>
+  <td class="issue-id">P2-10</td>
+  <td>Token 膨胀（第一轮 P2-1）</td>
+  <td class="fix-note">⏳ 延缓</td>
+  <td>—</td>
+  <td>项目 memory 标注"暂不处理"</td>
+</tr>
+</table>
+
+<!-- ===== 修复质量分析 ===== -->
+<h2>二、修复质量评估</h2>
+
+<!-- N1 behavior change -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('fix1')">
+  <span class="severity-tag sev-note">📝</span>
+  <div class="issue-title-group">
+    <div class="issue-title">N1 修复附加分析：cooldown→check 过渡行为发生变化</div>
+    <div class="issue-loc">story_engine.py:430-480</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新观察</span>
+    <span class="issue-tag">行为变化</span>
+  </div>
+  <span class="chevron" id="chev-fix1">&#9654;</span>
+</div>
+<div class="issue-body" id="fix1">
+
+<div class="problem-block">
+<div class="block-label">变更分析</div>
+<div class="problem-text">
+<p>N1 修复前：<code>arc_state</code>（局部快照）= "cooldown" → 无论 self.state.arc_state 是否已变为 "check"，都进入 full 叙事。</p>
+<p>N1 修复后：统一使用 <code>self.state.arc_state</code> → 当 cooldown_remaining 减到 0 后 state 切换为 "check"，叙事判定<b>也走 check 分支</b>。</p>
+
+<p><b>实际影响：</b>cooldown 的最后一步从"始终完整叙事"变为"check 判定"。check 分支会根据 importance 和碰撞情况选择 full/light/foreshadow 三种模式之一：</p>
+<ol>
+  <li>有碰撞或有意义事件(imp≥4) → full 叙事（与原行为一致）</li>
+  <li>imp≥3 且无碰撞 → light 叙事（比原行为更轻）</li>
+  <li>imp&lt;3 且无碰撞 → foreshadow 伏笔留白（比原行为轻得多）</li>
+</ol>
+
+<p><b>评估：</b>这不是一个 bug，而是一个合理的改进——原行为中 cooldown 最后一步"强制 full"可能导致一段无内容的冗余叙事。现在的 check 逻辑更精确地判断是否值得叙事。但需注意：如果剧情弧在高潮后迅速平静（cooldown 期间无新事件），cooldown 的最后一步可能被跳过（foreshadow 模式），读者感知到的高潮余韵期被缩短。</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Conversation search / Reflection trigger -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('fix2')">
+  <span class="severity-tag sev-info">🔍</span>
+  <div class="issue-title-group">
+    <div class="issue-title">新发现：反思触发时所有 active 角色均参与，但只应在"有叙事"时被触发</div>
+    <div class="issue-loc">story_engine.py:667-669 · _run_reflections()</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">反思频率</span>
+    <span class="issue-tag">性能</span>
+  </div>
+  <span class="chevron" id="chev-fix2">&#9654;</span>
+</div>
+<div class="issue-body" id="fix2">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="cm"># Lines 667-669: 基于 narrative_step_count 触发反思（全量 active 角色）</span>
+should_reflect = (
+    self.state.narrative_step_count > 0
+    <span class="kw">and</span> self.state.narrative_step_count % config.REFLECTION_INTERVAL == 0
+)
+<span class="kw">if</span> should_reflect:
+    <span class="kw">await</span> self._run_reflections(<span class="kw">active_char_ids</span>, step, time_label)  <span class="cm"># ← 所有活跃角色</span>
+
+<span class="cm"># Lines 1189-1222: _run_reflections — 对每个 cid 调 LLM + 解析</span>
+<span class="kw">for</span> cid <span class="kw">in</span> char_ids:
+    recent_mem = memory.get_recent_memories(...)
+    <span class="kw">if</span> <span class="kw">not</span> recent_mem:
+        <span class="kw">continue</span>                               <span class="cm"># 无记忆则跳过（轻微优化）</span>
+    <span class="cm"># LLM 调用 / JSON 解析 / 写入记忆...</span></code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>当前 <code>_run_reflections</code> 遍历 <b>所有 active_char_ids</b>（活跃角色），而非仅限活跃的交互动角色或所有角色。这导致：</p>
+
+<ol>
+  <li><b>过度触发：</b>一节课只有 2 个角色在上课（活跃于当前时间），反思也只在这 2 个角色上运行。其他 6 个"不活跃"的角色永远不会被反思。但如果当前时间有 8 个角色都活跃（课间休息），则所有 8 个角色同时触发反思 = 8 次 LLM 调用。</li>
+  <li><b>覆盖率不均：</b>活跃频率低的角色（如只在特定时间出现的配角）反思次数极低，可能 20 步才有一次反思。</li>
+  <li><b>与 Stanford 论文差异：</b>原论文在设计上，反思是每天结束时的全量操作（所有角色在夜间反思）。当前方案是每 3 个叙事步仅对活跃角色反思，活跃度直接决定了反思频率。</li>
+</ol>
+
+<p><b>严重程度：</b>中等 — 不活跃角色的认知发展受限（长期后果），但短期内不影响故事连贯性。主要是设计取舍问题。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案 A：反思覆盖所有角色（而非仅活跃角色）</b>
+每隔 REFLECTION_INTERVAL 个叙事步，对所有角色（而非仅 active）运行反思。不活跃角色的反思也可以基于其最近记忆生成。
+
+<code class="code-block"><span class="kw">if</span> should_reflect:
+    <span class="kw">await</span> self._run_reflections(
+        <span class="kw">list</span>(self.state.character_states.keys()),  <span class="cm"># 所有角色</span>
+        step, time_label
+    )</code>
+
+<b>方案 B：按天触发反思（Stanford 方案）</b>
+在跨日时（current_day 变化）触发所有角色的反思，而非基于叙事步计数。更自然——角色在每天结束时反思。
+
+<b>推荐 A</b>（改动最小，1 行变更），后续可考虑 B。
+</div>
+</div>
+</div>
+</div>
+
+<!-- N8 & N9 detail -->
+<h2>三、未修复项详细分析</h2>
+
+<!-- N8 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('unfix1')">
+  <span class="severity-tag sev-p2">N8</span>
+  <div class="issue-title-group">
+    <div class="issue-title">LLM 并发控制 — 仍未实现</div>
+    <div class="issue-loc">story_engine.py · 所有 LLM 调用点</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">并发</span><span class="issue-tag">API 限流</span><span class="issue-tag">未修复</span></div>
+  <span class="chevron" id="chev-unfix1">&#9654;</span>
+</div>
+<div class="issue-body" id="unfix1">
+
+<div class="problem-block">
+<div class="block-label">当前状态</div>
+<div class="problem-text">
+代码中没有任何 <code>asyncio.Semaphore</code> 或类似的并发控制。在每个时间步中：
+<ul>
+  <li>Step 2：活跃角色数的并行 LLM 调用（最多 8）</li>
+  <li>Step 3：对话生成并行调用（取决于碰撞数，通常 1-4）</li>
+  <li>Step R：反思并行调用（活跃角色数）</li>
+</ul>
+理论上峰值可达到 22 个并发请求。已有 retry + 指数退避作为软兜底保护。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案（与前报告一致）</div>
+<div class="solution-text">
+<code class="code-block"><span class="cm"># StoryEngine.__init__:</span>
+self._llm_semaphore = asyncio.Semaphore(<span class="num">6</span>)
+
+<span class="cm"># 每个 LLM 调用点:</span>
+<span class="kw">async</span> <span class="kw">with</span> self._llm_semaphore:
+    response = <span class="kw">await</span> llm_client.chat_async(...)</code>
+</div>
+</div>
+</div>
+</div>
+
+<!-- N9 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('unfix2')">
+  <span class="severity-tag sev-p2">N9</span>
+  <div class="issue-title-group">
+    <div class="issue-title">add_player_event 双路径割裂 — 仍未统一</div>
+    <div class="issue-loc">story_engine.py:1282-1301</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">玩家干预</span><span class="issue-tag">代码清理</span><span class="issue-tag">未修复</span></div>
+  <span class="chevron" id="chev-unfix2">&#9654;</span>
+</div>
+<div class="issue-body" id="unfix2">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="kw">def</span> add_player_event(self, event_type, description, hour=None):
+    <span class="kw">if</span> hour <span class="kw">is not None</span>:   <span class="cm"># ← 旧兼容路径，仍会触发</span>
+        <span class="cm"># 写入所有角色的 personal_schedule</span>
+        <span class="kw">for</span> cid, state <span class="kw">in</span> self.state.character_states.items():
+            state.personal_schedule.append(PersonalEvent(
+                day=self.state.current_day,
+                hour=int(hour) % 24,
+                description=<span class="str">f"[玩家] {description}"</span>,
+                importance=8,
+                source=<span class="str">"player"</span>,
+            ))
+        <span class="kw">return</span> ...
+
+    <span class="cm"># ← 新路径</span>
+    event, msg = world_event.add_player_event(
+        self.state.pending_player_events, ...)</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>旧路径将玩家事件写入<b>所有角色</b>的 personal_schedule，破坏了 per-agent schedule 的核心理念。且：</p>
+<ul>
+  <li>写入 <code>day=self.state.current_day</code> — 如果当前时间是 16:00，设定 hour=8 意味着事件在过去（可能触发时间倒退保护）</li>
+  <li><code>importance=8</code> 硬编码 — 所有玩家事件同等重要</li>
+  <li>不经过 <code>_judge_event_impact()</code> — 事件不会判定影响哪些角色</li>
+</ul>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>统一走新路径：</b>
+<ol>
+  <li>检查 Gradio UI 中 <code>add_player_event</code> 的调用方是否仍传 hour 参数</li>
+  <li>如果不传 → 删除旧路径分支</li>
+  <li>如果仍传 → 修改 UI 去掉 hour 参数，或在 WorldEvent 模型中增加 scheduled_hour 字段</li>
+  <li>将所有玩家事件统一走 <code>world_event.add_player_event</code> → <code>pending_player_events</code> → <code>_judge_event_impact</code> 路径</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ===== 第一轮审计回顾 ===== -->
+<h2>四、第一轮审计 (workflow-audit.html) 遗留项状态</h2>
+
+<table class="fix-table">
+<tr><th>ID</th><th>问题</th><th>状态</th><th>备注</th></tr>
+<tr>
+  <td class="issue-id">P0-1</td><td>Duration 占用模型</td><td class="fix-ok">✅ 已实现</td>
+  <td>Occupancy Model 已工作（story_engine.py:191-234），含 N2 修复</td>
+</tr>
+<tr>
+  <td class="issue-id">P0-2</td><td>时间倒走风险</td><td class="fix-ok">✅ 已修复</td>
+  <td>防倒退校验 + ANTI_REVERSE_MIN_MINUTES（story_engine.py:1070-1084）</td>
+</tr>
+<tr>
+  <td class="issue-id">P0-3</td><td>LLM 调用无优雅降级</td><td class="fix-ok">✅ 已修复</td>
+  <td>retry + 指数退避 + 占位意图 fallback（story_engine.py:303-309）</td>
+</tr>
+<tr>
+  <td class="issue-id">P0-4</td><td>目的地自由文本匹配差</td><td class="fix-ok">✅ 已修复</td>
+  <td>LOCATIONS_DEFAULT 标准化列表 + prompt 约束（config.py:69-73、character_action.py:52）</td>
+</tr>
+<tr>
+  <td class="issue-id">P1-1</td><td>叙事按场景独立生成</td><td class="fix-ok">✅ 已修复</td>
+  <td>统一单次 LLM 调用 + loc_groups 场景指导（story_engine.py:1146-1187、narrative.py:58-72）</td>
+</tr>
+<tr>
+  <td class="issue-id">P1-2</td><td>对话一致性问题</td><td class="fix-note">⚠️ 简单版</td>
+  <td>对话 prompt 中已有"状态快照"约束 + 对话结果按序更新情绪</td>
+</tr>
+<tr>
+  <td class="issue-id">P1-3</td><td>记忆淘汰二元排序</td><td class="fix-ok">✅ 已修复</td>
+  <td>加权评分替代布尔排序 + REFLECTION_BONUS（memory.py:44-52）</td>
+</tr>
+<tr>
+  <td class="issue-id">P1-4</td><td>伏笔无过期机制</td><td class="fix-ok">✅ 已修复</td>
+  <td>FORESHADOW_MAX_AGE 清理 + created_step 标记（story_engine.py:591-618）</td>
+</tr>
+<tr>
+  <td class="issue-id">P1-5</td><td>角色并行决策互不感知</td><td class="fix-note">⚠️ 未处理</td>
+  <td>意图交叉校验（规则层）未实现</td>
+</tr>
+<tr>
+  <td class="issue-id">P2-1</td><td>Token 膨胀</td><td class="fix-note">⏳ 延缓</td>
+  <td>项目标注"暂不处理"</td>
+</tr>
+<tr>
+  <td class="issue-id">P2-2</td><td>cooldown 无 re-entry 保护</td><td class="fix-ok">✅ 已修复</td>
+  <td>cooldown 期间锁定，忽略重入（story_engine.py:432-433）</td>
+</tr>
+<tr>
+  <td class="issue-id">P2-3</td><td>反思 skip 过多长期不触发</td><td class="fix-ok">✅ 已修复</td>
+  <td>改为 narrative_step_count 计数（story_engine.py:641, 664-665）</td>
+</tr>
+<tr>
+  <td class="issue-id">P2-4</td><td>auto_event 无消费保障</td><td class="fix-note">⚠️ 部分</td>
+  <td>事件触发时强制叙事（方案 A）未实现；但受影响角色写入记忆（方案 B）已通过 _judge_event_impact 实现</td>
+</tr>
+</table>
+
+<!-- ===== 综合路线图 ===== -->
+<h2>五、优先级路线图</h2>
+
+<div class="rec-item" style="background: #fbeaf0;">
+  <div class="rec-title" style="color: #4b1528;">🔴 建议立即处理</div>
+  <b>N8 并发控制</b> — 引入 asyncio.Semaphore(6)，防止高并发下 API 限流和超时。改动量小（~5行），收益明确。<br>
+  <b>P1-5 意图交叉校验</b> — 轻量规则层，在碰撞检测前做目标指向型意图的交叉校验，零 LLM 成本。
+</div>
+
+<div class="rec-item" style="background: #faece7; margin-top: 12px;">
+  <div class="rec-title" style="color: #4a1b0c;">🟠 建议尽快处理</div>
+  <b>N9 双路径统一</b> — 废弃 add_player_event 的旧 hour 路径，统一走世界事件系统。<br>
+  <b>反思覆盖范围</b> — 反思触发时改为所有角色（非仅活跃角色），确保配角认知发展。<br>
+  <b>P2-4 auto_event 消费保障</b> — 事件有受影响的角色时强制叙事。
+</div>
+
+<div class="rec-item" style="background: #faeeda; margin-top: 12px;">
+  <div class="rec-title" style="color: #412402;">🟡 后续迭代</div>
+  <b>P2-10 Token 膨胀</b> — 当记忆和叙事上下文接近 64k 限制时再处理。届时引入记忆摘要或嵌入检索。<br>
+  <b>对话一致性深度版</b> — 同一角色多段对话的情绪共享和顺序编排。<br>
+  <b>反思按天触发</b> — 改为跨日时全量触发（Stanford 论文方案）。
+</div>
+
+<div class="meta-note" style="margin-top: 24px;">
+  <strong>总结：</strong>从 v2 审计的 9 项中，7 项已完全修复。修复质量整体良好——每个修复都包含了对应的注释标记（"N1 修复"、"N3: 按 recency"等），便于追踪。N1 修复附带了一个合理的行为变化（cooldown 最后一步走 check 逻辑而非强制 full），这是改进而非回归。N8/N9 未修复但不会在短期内产生崩溃风险——retry + 指数退避提供了软兜底。P2-10 的延缓是明确的权衡决策。整体系统稳定性在 v1→v2→v3 的修复轮次中持续改善。
+</div>
+
+</div>
+
+<script>
+function toggle(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+document.querySelectorAll('.issue-body').forEach(el => el.classList.add('open'));
+document.querySelectorAll('.chevron').forEach(el => el.classList.add('open'));
+</script>
+</body>
+</html>

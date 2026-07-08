@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story-Sim 第二轮深度分析报告 — 隐含问题</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; background: #f5f3ef; color: #2c2c2a; line-height: 1.7; font-size: 14px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; color: #1a1a1a; }
+.subtitle { font-size: 13px; color: #888780; margin-bottom: 20px; }
+h2 { font-size: 18px; font-weight: 500; margin: 28px 0 12px; color: #2c2c2a; border-left: 3px solid #534ab7; padding-left: 12px; }
+h3 { font-size: 15px; font-weight: 500; margin: 16px 0 8px; color: #3c3489; }
+
+.summary-row { display: flex; gap: 12px; margin: 16px 0 24px; flex-wrap: wrap; }
+.summary-badge { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+.badge-p0 { background: #fbeaf0; color: #993556; }
+.badge-p1 { background: #faece7; color: #993c1d; }
+.badge-p2 { background: #faeeda; color: #854f0b; }
+
+.meta-note { background: #eeedfe; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; font-size: 13px; line-height: 1.8; border-left: 3px solid #534ab7; }
+.meta-note strong { color: #3c3489; }
+
+.issue-card { background: white; border-radius: 12px; border: 0.5px solid #d3d1c7; margin: 16px 0; overflow: hidden; }
+.issue-header { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px; cursor: pointer; user-select: none; transition: background 0.15s; }
+.issue-header:hover { background: #f1efe8; }
+.severity-tag { font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.5px; }
+.sev-p0 { background: #fbeaf0; color: #4b1528; }
+.sev-p1 { background: #faece7; color: #4a1b0c; }
+.sev-p2 { background: #faeeda; color: #412402; }
+.sev-note { background: #e1f5ee; color: #0f6e56; }
+.issue-title-group { flex: 1; }
+.issue-title { font-weight: 500; font-size: 15px; }
+.issue-loc { font-size: 11px; color: #888780; margin-top: 2px; }
+.issue-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+.issue-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #f1efe8; color: #5f5e5a; }
+.issue-tag-new { background: #eeedfe; color: #534ab7; font-weight: 500; }
+.issue-body { padding: 0 20px 20px; display: none; }
+.issue-body.open { display: block; }
+.chevron { transition: transform 0.2s; font-size: 12px; color: #888780; flex-shrink: 0; }
+.chevron.open { transform: rotate(90deg); }
+
+.problem-block, .solution-block, .evidence-block { margin: 12px 0; }
+.block-label { font-size: 11px; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+.problem-block .block-label { color: #993c1d; }
+.solution-block .block-label { color: #0f6e56; }
+.evidence-block .block-label { color: #534ab7; }
+
+.problem-text, .solution-text, .evidence-text {
+  padding: 12px 16px; border-radius: 8px; font-size: 13px; line-height: 1.8;
+}
+.problem-text { background: #faece7; border-left: 3px solid #993c1d; }
+.solution-text { background: #e1f5ee; border-left: 3px solid #0f6e56; }
+.evidence-text { background: #f1efe8; border-left: 3px solid #534ab7; }
+
+.code-inline { background: #f1efe8; padding: 1px 6px; border-radius: 3px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; color: #534ab7; }
+.code-block {
+  background: #1a1a1a; color: #d3d1c7; border-radius: 8px; padding: 14px 18px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px;
+  line-height: 1.8; white-space: pre-wrap; margin: 4px 0; overflow-x: auto;
+}
+.code-block .kw { color: #7f77dd; }
+.code-block .cm { color: #6d8a78; }
+.code-block .str { color: #d85a30; }
+
+.summary-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+.summary-table th { text-align: left; padding: 6px 12px; background: #f1efe8; font-weight: 500; font-size: 12px; }
+.summary-table td { padding: 8px 12px; border-bottom: 0.5px solid #e1efe8; vertical-align: top; }
+.summary-table tr:hover td { background: #faf9f6; }
+
+.scope-box { background: #faeeda; border-radius: 8px; padding: 12px 16px; margin: 8px 0; font-size: 12px; border-left: 3px solid #854f0b; }
+.scope-box strong { color: #412402; }
+
+.venn { margin: 16px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Story-Sim 第二轮深度分析报告</h1>
+<p class="subtitle">交叉验证：工作流文档 × 完整源码 | 聚焦第一轮审计（workflow-audit.html）遗漏的隐含问题 | 2026-05-31</p>
+
+<div class="summary-row">
+  <div class="summary-badge badge-p0">🔴 隐含逻辑缺陷 2 项</div>
+  <div class="summary-badge badge-p1">🟠 设计隐患 3 项</div>
+  <div class="summary-badge badge-p2">🟡 健壮性缺口 4 项</div>
+  <div class="summary-badge" style="background:#e1f5ee;color:#0f6e56;">📝 已修复确认 1 项</div>
+</div>
+
+<!-- ===== 方法论 ===== -->
+<div class="meta-note">
+  <strong>分析方法：</strong>本报告不重复第一轮 audit 已识别的问题（P0-1 Occupancy Model 已实现、P0-2 时间防倒退已加入、P0-4 标准化地点已加入 config、P1-1 叙事单次调用已实现、P1-3 记忆加权排序已修复、P1-4 伏笔过期清理已实现、P2-2 cooldown re-entry 已锁定、P2-3 反思基数已改为 narrative_step_count）。<br>
+  <strong>本报告聚焦：</strong>第一轮审计<b>完全未提及</b>的隐含问题，这些问题源于对源码细节的深入阅读和逻辑推演。每个问题均附带源码证据。
+</div>
+
+<!-- ===== 概览表 ===== -->
+<h2>问题清单总览</h2>
+<table class="summary-table">
+<tr><th>#</th><th>严重</th><th>问题</th><th>位置</th><th>影响</th></tr>
+<tr><td>N1</td><td>🔴</td><td><code>arc_state</code> 局部变量与 <code>self.state.arc_state</code> 快照不一致</td><td>story_engine.py:379-421</td><td>叙事模式判定依赖隐式默认值，重构时有回归风险</td></tr>
+<tr><td>N2</td><td>🔴</td><td>占用角色没有 next_event 写入，导致 schedule 出现空窗期</td><td>story_engine.py:291-308</td><td>占用结束后角色可能长时间无事件，需回退重初始化</td></tr>
+<tr><td>N3</td><td>🟠</td><td>伏笔 buffer 消费顺序为 FIFO，与叙事上下文无关联</td><td>story_engine.py:569-572</td><td>陈旧/不相关伏笔先被注入，语境错位</td></tr>
+<tr><td>N4</td><td>🟠</td><td>对话生成失败被静默吞没，仅在 <code>generate_dialogue</code> 内部兜底</td><td>story_engine.py:344 + world_sim.py:183-193</td><td>函数级异常（非 LLM 异常）被 <code>return_exceptions</code> 吞没</td></tr>
+<tr><td>N5</td><td>🟠</td><td><code>_pop_scheduled_events</code> 的"cid not in events"保护遗留重复事件</td><td>story_engine.py:659-675</td><td>罕见但可能导致世界时钟在同一时间点反复触发</td></tr>
+<tr><td>N6</td><td>🟡</td><td>叙事 prompt 仅含 system 角色消息，LLM 响应不稳定</td><td>prompts/narrative.py:158</td><td>JSON 格式遵守率降低，偶发 malformed JSON</td></tr>
+<tr><td>N7</td><td>🟡</td><td><code>_initialize_personal_schedules</code> 中跨日判断过于简单</td><td>story_engine.py:731</td><td>特殊场景（如夜间初始化）可能误判同日/翌日</td></tr>
+<tr><td>N8</td><td>🟡</td><td>没有 LLM 并发控制，8+ 角色同时调用可能触发限流</td><td>story_engine.py:269 + 整个 Step 2/3/R</td><td>运行 >30 步后偶发 429/超时</td></tr>
+<tr><td>N9</td><td>🟡</td><td><code>add_player_event</code> 双路径（hour≠None vs hour=None）逻辑割裂</td><td>story_engine.py:1156-1187</td><td>旧兼容路径写入所有角色 schedule，行为与设计意图不符</td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2>🔴 隐含逻辑缺陷</h2>
+
+<!-- N1 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n1')">
+  <span class="severity-tag sev-p0">N1</span>
+  <div class="issue-title-group">
+    <div class="issue-title"><code>arc_state</code> 局部变量与 <code>self.state.arc_state</code> 使用快照不一致 — 叙事模式判定依赖隐式默认值</div>
+    <div class="issue-loc">engine/story_engine.py · advance_one_step() · Line 379-421</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">状态机</span>
+    <span class="issue-tag">逻辑缺陷</span>
+  </div>
+  <span class="chevron" id="chev-n1">&#9654;</span>
+</div>
+<div class="issue-body" id="n1">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="cm"># Line 379: 捕获 arc_state 的快照（此时尚未变更）</span>
+<span class="kw">arc_state</span> = self.state.arc_state
+
+<span class="cm"># Lines 380-395: 可能变更 self.state.arc_state</span>
+<span class="kw">if</span> self.state.arc_state == <span class="str">"cooldown"</span>:
+    self.state.arc_cooldown_remaining -= 1
+    <span class="kw">if</span> self.state.arc_cooldown_remaining &lt;= 0:
+        self.state.arc_state = <span class="str">"check"</span>     <span class="cm"># ← 变更了！</span>
+<span class="kw">elif</span> max_importance &gt;= config.ARC_HIGH_IMPORTANCE:
+    self.state.arc_state = <span class="str">"cooldown"</span>        <span class="cm"># ← 变更了！</span>
+    ...
+
+<span class="cm"># Lines 400-429: 叙事模式判定 —— 混用了两个变量</span>
+<span class="kw">if</span> <span class="kw">arc_state</span> == <span class="str">"cooldown"</span>:          <span class="cm"># ← 用的是局部快照！</span>
+    narrative_mode = <span class="str">"full"</span>
+<span class="kw">elif</span> <span class="kw">self.state.arc_state</span> == <span class="str">"check"</span>:   <span class="cm"># ← 用的是当前状态！</span>
+    ...
+<span class="kw">elif</span> <span class="kw">self.state.arc_state</span> == <span class="str">"normal"</span>:   <span class="cm"># ← 也是当前状态</span>
+    ...</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>在单个函数中，<code>arc_state</code>（line 379 的快照）和 <code>self.state.arc_state</code>（被 lines 380-395 变更后的值）同时用于叙事模式判定，形成<b>时间旅行式不一致</b>。</p>
+
+<p><b>具体场景（最容易出问题的路径）：</b></p>
+<ol>
+  <li>进入函数时 arc_state = "cooldown"</li>
+  <li>line 380 进入 cooldown 分支 → arc_cooldown_remaining 减为 0 → <code>self.state.arc_state = "check"</code></li>
+  <li>line 400：<code>arc_state == "cooldown"</code> → <b>TRUE</b>（快照仍是 "cooldown"）→ narrative_mode = "full"</li>
+  <li>line 404：<code>self.state.arc_state == "check"</code> → <b>TRUE</b>（已变更）→ 也会进入此分支</li>
+  <li><b>结论：两个分支都匹配了不同的时间快照。当前因为检查顺序（cooldown 在前）碰巧正确，但语义上是分裂的。</b></li>
+</ol>
+
+<p><b>为什么现能运行但不安全：</b>cooldown 进入"check"这一步，line 400 用快照判断为 true → "full"叙事。下一轮 line 404 用当前状态判断 → 进入 check 逻辑。这依赖 (a) narrative_mode 默认值="full"、(b) cooldown 分支排在最前面、(c) check 和 normal 分支都用 self.state.arc_state。三者缺一不可。重构时只要调换分支顺序或改变默认值，就可能产生错误。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>统一使用 self.state.arc_state：</b>删除局部变量 <code>arc_state</code>，所有判定统一从 <code>self.state.arc_state</code> 读取。如果需要在 branch 内引用"进入函数时的状态"，显式声明 <code>entered_as = self.state.arc_state</code> 并只用于日志。
+
+<code class="code-block"><span class="cm"># 推荐改写：</span>
+<span class="kw">entered_arc</span> = self.state.arc_state  <span class="cm"># 仅用于日志</span>
+
+<span class="kw">if</span> self.state.arc_state == <span class="str">"cooldown"</span>:
+    self.state.arc_cooldown_remaining -= 1
+    <span class="kw">if</span> self.state.arc_cooldown_remaining &lt;= 0:
+        self.state.arc_state = <span class="str">"check"</span>
+<span class="kw">elif</span> self.state.arc_state == <span class="str">"normal"</span> <span class="kw">and</span> max_importance &gt;= ARC_HIGH_IMPORTANCE:
+    self.state.arc_state = <span class="str">"cooldown"</span>
+    self.state.arc_cooldown_remaining = ARC_COOLDOWN_STEPS
+
+<span class="cm"># 叙事判定：统一使用 self.state.arc_state</span>
+<span class="kw">if</span> <span class="kw">self.state.arc_state</span> == <span class="str">"cooldown"</span>:
+    narrative_mode = <span class="str">"full"</span>
+<span class="kw">elif</span> <span class="kw">self.state.arc_state</span> == <span class="str">"check"</span>:
+    ...
+<span class="kw">elif</span> <span class="kw">self.state.arc_state</span> == <span class="str">"normal"</span>:
+    ...</code>
+</div>
+</div>
+</div>
+</div>
+
+<!-- N2 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n2')">
+  <span class="severity-tag sev-p0">N2</span>
+  <div class="issue-title-group">
+    <div class="issue-title">占用角色不写入 next_event → 占用结束后出现 schedule 空窗期</div>
+    <div class="issue-loc">engine/story_engine.py · Line 291-308 · Occupancy Model 后处理</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">时间系统</span>
+    <span class="issue-tag">调度一致性</span>
+  </div>
+  <span class="chevron" id="chev-n2">&#9654;</span>
+</div>
+<div class="issue-body" id="n2">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="cm"># Lines 291-308: 占用角色生成占位意图，但不更新 schedule</span>
+<span class="kw">for</span> cid <span class="kw">in</span> active_char_ids:
+    <span class="kw">if</span> cid <span class="kw">not in</span> intents:                          <span class="cm"># 被跳过 LLM 的角色</span>
+        occ = self.state.occupancy.get(cid, {})
+        ...
+        intents[cid] = {
+            <span class="str">"intent"</span>: activity,
+            <span class="str">"destination"</span>: locked_loc,
+            ...
+        }
+        <span class="cm"># ⚠ 这里注释明确写着：占用角色不需要更新 time schedule</span>
+        <span class="kw">logger</span>.debug(...)</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>P0-1 Occupancy Model 的实现中，当角色被占用时，代码跳过 LLM 意图生成（line 259 <code>continue</code>），并手动生成占位意图（lines 291-308）。但注释明确写"占用角色不需要更新 time schedule"——这意味着 <b>不调用 <code>_update_character_schedule_from_intent()</code></b>。</p>
+
+<p><b>后果链：</b></p>
+<ol>
+  <li>角色 A 在 8:00-9:30 上课（占用中）</li>
+  <li>8:30 世界时钟推进，A 被占用 → 使用占位意图，不写 next_event</li>
+  <li>9:00 世界时钟再次推进，A 仍被占用 → 又是占位意图</li>
+  <li>9:30 之后，busy_until 过期，<code>occupancy</code> 条目被清理</li>
+  <li>此时 A 的 <code>personal_schedule</code> 中没有 9:30 之后的事件（因为前两步都没写入）</li>
+  <li>A 从"活跃角色"列表中消失，<b>被故事遗忘了</b></li>
+  <li>直到 <code>_get_next_world_time()</code> 返回 None → 触发 <code>_initialize_personal_schedules()</code> 回退</li>
+</ol>
+
+<p><b>严重程度评估：</b>在初始 schedule 还有后续事件的场景下（比如 8:00 上课 + 10:00 课间休息），10:00 的事件仍会触发，所以角色不会完全消失。但如果占用覆盖了 schedule 中最后一个事件（例如 15:00-16:30 社团活动，结束后没有更多 preset 事件），角色确实会失联。发生概率取决于初始 schedule 的覆盖密度。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>占用结束时自动写入一个 next_event：</b>
+
+<ol>
+  <li>在占位意图生成处（lines 291-308），仍不调用 <code>_update_character_schedule_from_intent</code>（避免在占用期间写入新事件）</li>
+  <li>在 occupancy 清理逻辑处（lines 193-201），当 occupancy 过期被删除时，<b>自动为该角色写入一个"恢复自由"的 next_event</b>：</li>
+</ol>
+
+<code class="code-block"><span class="cm"># 在 occupancy 过期清理后追加：</span>
+<span class="kw">for</span> cid <span class="kw">in</span> expired:
+    occ = self.state.occupancy[cid]
+    busy_until = occ.get(<span class="str">"busy_until"</span>)
+    <span class="cm"># 在占用结束时间点之后写入一个自由活动事件</span>
+    state = self.state.character_states[cid]
+    state.personal_schedule.append(PersonalEvent(
+        day=busy_until[0], hour=busy_until[1], minute=busy_until[2] + 1,
+        duration=60, description=<span class="str">"自由活动"</span>,
+        importance=3, source=<span class="str">"auto"</span>,
+    ))
+    state.personal_schedule.sort(...)
+    <span class="kw">logger</span>.debug(<span class="str">f"释放 {cid} 占用后写入自由活动事件"</span>)</code>
+
+<p style="margin-top:10px;">这样确保每个角色在任何时刻都有一个"未来事件"，避免从调度系统消失。</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ================================================================== -->
+<h2>🟠 设计隐患</h2>
+
+<!-- N3 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n3')">
+  <span class="severity-tag sev-p1">N3</span>
+  <div class="issue-title-group">
+    <div class="issue-title">伏笔 buffer 消费顺序为 FIFO — 与叙事上下文无关联</div>
+    <div class="issue-loc">engine/story_engine.py · Line 569-572</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">叙事系统</span>
+    <span class="issue-tag">顺序问题</span>
+  </div>
+  <span class="chevron" id="chev-n3">&#9654;</span>
+</div>
+<div class="issue-body" id="n3">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="cm"># Lines 569-572: 前5条伏笔被消费，不论内容是否与当前场景相关</span>
+take = self.state.foreshadow_buffer[:<span class="str">5</span>]
+foreshadow_texts = [e.get(<span class="str">"text"</span>, <span class="str">""</span>) ... <span class="kw">for</span> e <span class="kw">in</span> take]
+foreshadow_content = <span class="str">"\n"</span>.join(foreshadow_texts)
+self.state.foreshadow_buffer = self.state.foreshadow_buffer[<span class="str">5</span>:]</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>伏笔 buffer 是列表，消费时取 <code>[:5]</code> — 即<b>最老的 5 条先被消费</b>。这意味着：</p>
+<ol>
+  <li>Step 8 产生的伏笔"走廊上似乎有人跟踪"（与走廊场景相关）</li>
+  <li>Step 15 产生的伏笔"食堂菜单换了"（与食堂场景相关）</li>
+  <li>Step 18 叙事场景是【食堂】，但 buffer 先取的是 Step 8 的"走廊跟踪"</li>
+  <li>结果：叙事 prompt 被注入了与当前场景<b>语境错位</b>的伏笔，LLM 强行融入会产生违和感</li>
+</ol>
+
+<p>当前的"清理过期 + 消费前5条"机制保证了新鲜度（超过 8 步的会被清理），但没有保证<b>语境匹配度</b>。伏笔与当前场景的关联纯粹靠运气。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案 A（轻量）：按 created_step 倒序消费</b>
+<ol>
+  <li>改为 <code>sorted(buffer, key=lambda e: -e["created_step"])[:5]</code> — 消费<b>最新的 5 条</b></li>
+  <li>好处：最新伏笔更可能与当前叙事语境相关</li>
+  <li>改动极小（1 行）</li>
+</ol>
+
+<b>方案 B（更精确）：按场景关键词匹配</b>
+<ol>
+  <li>对当前 active_interactions 提取关键词（角色名 + 位置名）</li>
+  <li>对每条伏笔的 text 计算关键词命中数</li>
+  <li>优先消费命中数最高的伏笔，其次按 recency</li>
+  <li>缺点：增加计算量，且关键词可能误导匹配</li>
+</ol>
+
+<b>推荐方案 A</b> — 改动成本最低，逻辑上合理的假设是"越新的伏笔越有可能与当前上下文相关"。
+</div>
+</div>
+</div>
+</div>
+
+<!-- N4 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n4')">
+  <span class="severity-tag sev-p1">N4</span>
+  <div class="issue-title-group">
+    <div class="issue-title">对话生成内部异常被 <code>asyncio.gather(return_exceptions=True)</code> 静默吞没</div>
+    <div class="issue-loc">engine/story_engine.py:344 + engine/world_sim.py:183-193</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">错误处理</span>
+    <span class="issue-tag">静默失败</span>
+  </div>
+  <span class="chevron" id="chev-n4">&#9654;</span>
+</div>
+<div class="issue-body" id="n4">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="cm"># story_engine.py line 344:</span>
+<span class="kw">await</span> asyncio.gather(*dialogue_tasks, <span class="kw">return_exceptions</span>=<span class="str">True</span>)
+<span class="cm"># ⚠ 返回值未使用！异常被吞没</span>
+
+<span class="cm"># world_sim.py lines 183-193: generate_dialogue 内部有 try/except</span>
+<span class="kw">try</span>:
+    response = <span class="kw">await</span> llm_client.chat_async(messages, json_mode=<span class="str">True</span>)
+    result = llm_client.parse_json_response(response)
+    encounter.dialogue = result.get(<span class="str">"dialogue"</span>, [])
+    encounter.outcome = result.get(<span class="str">"outcome"</span>, <span class="str">""</span>)
+<span class="kw">except</span> <span class="kw">Exception</span> <span class="kw">as</span> e:
+    <span class="kw">logger</span>.error(<span class="str">f"对话生成失败: {e}"</span>)
+    encounter.outcome = <span class="str">"两人短暂对视后各自离开。"</span></code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>两层防护看起来完善，但有一个缝隙：<code>generate_dialogue</code> 内部的 try/except 捕获了 LLM 调用异常。但如果异常发生在 <b>try 块之外</b>（例如访问 character_states 的 KeyError、relationship 模块的 AttributeError），异常会传播到 <code>asyncio.gather(return_exceptions=True)</code> 被吞没，<b>encounter 不会被修改</b>（dialogue 和 outcome 保持 None）。</p>
+
+<p>下游代码 <code>build_interactions()</code> 在 line 222-226 中访问 <code>encounter.outcome</code> 时，None 值被优雅处理（if e.outcome 判断），但 <code>encounter.dialogue</code> 为 None 时，在 narrative prompt 构建阶段（narrative.py line 46-53）会出错：</p>
+
+<code class="code-block"><span class="kw">for</span> enc <span class="kw">in</span> ia.encounters:
+    <span class="kw">if</span> enc.dialogue:                  <span class="cm"># None → False，安全</span>
+        ...
+        <span class="kw">for</span> d <span class="kw">in</span> enc.dialogue:          <span class="cm"># 但如果 dialogue=[] → 空循环，安全</span>
+            parts.append(...)</code>
+
+<p>所以当前<b>恰好安全</b>（narrative.py 中的 None 检查保护了下游）。但这是一个隐藏的耦合——如果将来 narrative.py 的代码移除 None 检查或改为 <code>if len(enc.dialogue) > 0</code>，就会崩溃。静默吞没的异常也让调试极其困难。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：显式检查 gather 结果，记录失败</b>
+
+<code class="code-block"><span class="cm"># 替代 line 344:</span>
+results = <span class="kw">await</span> asyncio.gather(*dialogue_tasks, <span class="kw">return_exceptions</span>=<span class="str">True</span>)
+<span class="kw">for</span> i, result <span class="kw">in</span> <span class="kw">enumerate</span>(results):
+    <span class="kw">if</span> <span class="kw">isinstance</span>(result, <span class="kw">Exception</span>):
+        enc = dialogue_encounters[i]
+        <span class="kw">logger</span>.error(<span class="str">f"对话生成异常: {enc.character_a}↔{enc.character_b}: {result}"</span>)
+        enc.outcome = <span class="str">"两人短暂对视后各自离开。"</span>  <span class="cm"># 兜底</span></code>
+
+另外，在 <code>generate_dialogue</code> 内部将 try/except 的范围扩大到整个函数体，确保任何异常都在函数内捕获。
+</div>
+</div>
+</div>
+</div>
+
+<!-- N5 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n5')">
+  <span class="severity-tag sev-p1">N5</span>
+  <div class="issue-title-group">
+    <div class="issue-title"><code>_pop_scheduled_events</code> 的"每个角色只取一个事件"保护遗留重复事件</div>
+    <div class="issue-loc">engine/story_engine.py · Line 659-675</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">调度系统</span>
+    <span class="issue-tag">边界情况</span>
+  </div>
+  <span class="chevron" id="chev-n5">&#9654;</span>
+</div>
+<div class="issue-body" id="n5">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="kw">def</span> _pop_scheduled_events(self, day, hour, minute=0):
+    events = {}
+    <span class="kw">for</span> cid, state <span class="kw">in</span> self.state.character_states.items():
+        remaining = []
+        <span class="kw">for</span> evt <span class="kw">in</span> state.personal_schedule:
+            <span class="kw">if</span> evt.day == day <span class="kw">and</span> evt.hour == hour <span class="kw">and</span> evt.minute == minute \
+               <span class="kw">and</span> cid <span class="kw">not in</span> events:   <span class="cm"># ← 只取第一个！</span>
+                events[cid] = {...}
+            <span class="kw">else</span>:
+                remaining.append(evt)             <span class="cm"># 第二个同时间事件被保留</span>
+        state.personal_schedule = remaining</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p><code>cid not in events</code> 的保护确保每个角色在同一分钟只取一个事件。但如果由于 bug 或 LLM 输出异常导致同一角色在同一分钟有两个事件，<b>第二个被保留在 personal_schedule 中</b>。</p>
+
+<p><b>后果：</b></p>
+<ol>
+  <li>当前步：第一个事件被消费，第二个仍留在 schedule[0]（同一天同一分钟）</li>
+  <li>下一步：<code>_get_next_world_time()</code> 再次找到同一个 (day, hour, minute)</li>
+  <li>世界时钟"原地踏步"——在同一天同一分钟内再次触发</li>
+  <li>如果 LLM 再次为这个角色生成同时间 next_event，可能形成<b>无限循环</b></li>
+</ol>
+
+<p><b>触发概率：</b>低——需要在同一分钟出现重复事件。这通常发生在：初始化时 LLM 返回了重叠时间的 schedule、或游戏加载旧存档数据异常。但在大量运行中偶尔会发生。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>在 pop 时同时清理所有同时间的事件（而非只取第一个），并记录 warning：</b>
+
+<code class="code-block"><span class="kw">def</span> _pop_scheduled_events(self, day, hour, minute=0):
+    events = {}
+    <span class="kw">for</span> cid, state <span class="kw">in</span> self.state.character_states.items():
+        remaining = []
+        taken = <span class="str">False</span>
+        <span class="kw">for</span> evt <span class="kw">in</span> state.personal_schedule:
+            <span class="kw">if</span> evt.day == day <span class="kw">and</span> evt.hour == hour <span class="kw">and</span> evt.minute == minute:
+                <span class="kw">if</span> <span class="kw">not</span> taken:
+                    events[cid] = {...}
+                    taken = <span class="str">True</span>
+                <span class="kw">else</span>:
+                    <span class="kw">logger</span>.warning(<span class="str">f"重复事件: {cid} 在 d{day} {hour}:{minute} 有多个事件，丢弃"</span>)
+                    <span class="cm"># 不加入 remaining，直接丢弃</span>
+            <span class="kw">else</span>:
+                remaining.append(evt)
+        state.personal_schedule = remaining</code>
+
+<p style="margin-top:10px;">同时，在 <code>_update_character_schedule_from_intent</code> 和 <code>_initialize_personal_schedules</code> 中加入<b>同时间去重</b>（写入前检查是否已有同时间的 event）。</p>
+</div>
+</div>
+</div>
+</div>
+
+
+<!-- ================================================================== -->
+<h2>🟡 健壮性缺口</h2>
+
+<!-- N6 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n6')">
+  <span class="severity-tag sev-p2">N6</span>
+  <div class="issue-title-group">
+    <div class="issue-title">叙事 prompt 仅含 system 角色 — DeepSeek 对 system message 的 JSON 遵守率较低</div>
+    <div class="issue-loc">prompts/narrative.py · Line 158</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">LLM 交互</span>
+    <span class="issue-tag">prompt 工程</span>
+  </div>
+  <span class="chevron" id="chev-n6">&#9654;</span>
+</div>
+<div class="issue-body" id="n6">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="cm"># prompts/narrative.py line 158 — 唯一返回的 message:</span>
+<span class="kw">return</span> [{<span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: system_prompt}]
+
+<span class="cm"># 对比：character_action.py line 127-131 — 同样只有 system:</span>
+messages = [
+    {<span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: system_prompt},
+]</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>DeepSeek API 文档中，<code>system</code> 角色定义为<b>系统级指令</b>，<code>user</code> 角色定义为<b>用户查询</b>。当整个 prompt 都在 system message 中、没有 user message 时，模型有时会"忘记"它应该按照 JSON 格式输出。这在实践中表现为：</p>
+<ul>
+  <li>输出纯文本叙事而不包装在 JSON 的 <code>narrative</code> 字段中</li>
+  <li>忘记输出 <code>foreshadowing</code> 字段</li>
+  <li>在 JSON 之前添加解释性文字（"好的，这是叙事文本："）</li>
+</ul>
+
+<p><code>llm_client.parse_json_response()</code> 有兜底解析（正则提取），但这些兜底只能恢复 narrative 文本，<code>foreshadowing</code> 字段丢失。</p>
+
+<p><b>对比：</b><code>character_action.py</code> 和 <code>reflection.py</code> 的 prompt 也是仅 system role。所有 LLM 调用点都面临同样的风险。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>在 system 之后追加一个简短的 user message 作为"触发器"：</b>
+
+<code class="code-block"><span class="kw">return</span> [
+    {<span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: system_prompt},
+    {<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: <span class="str">"请按照要求输出 JSON。"</span>}
+]</code>
+
+<p style="margin-top:10px;">同样修改 <code>character_action.py</code>、<code>reflection.py</code>、<code>world_sim.py</code>、<code>auto_event.py</code>、<code>world_event_judge.py</code> 中所有仅含 system message 的 prompt。</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- N7 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n7')">
+  <span class="severity-tag sev-p2">N7</span>
+  <div class="issue-title-group">
+    <div class="issue-title"><code>_initialize_personal_schedules</code> 跨日判断过于简单 — LLM 输出绝对小时被误判</div>
+    <div class="issue-loc">engine/story_engine.py · Line 728-732</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">时间系统</span>
+    <span class="issue-tag">边界情况</span>
+  </div>
+  <span class="chevron" id="chev-n7">&#9654;</span>
+</div>
+<div class="issue-body" id="n7">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="cm"># Lines 728-732:</span>
+h = int(item.get(<span class="str">"hour"</span>, base_hour + 2)) % 24
+...
+actual_hour = h
+actual_day = self.state.current_day
+<span class="kw">if</span> actual_hour &lt;= base_hour:          <span class="cm"># ← 唯一判断标准</span>
+    actual_day += 1</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>跨日判断仅依赖 <code>actual_hour <= base_hour</code>。这在简单场景下正确，但有两个边界问题：</p>
+
+<ol>
+  <li><b>多日跨度：</b>如果 LLM 返回 <code>hour=8</code> 而 <code>base_hour=20</code>，合理推断是"明天 8 点"（+1 day）。但如果其实是"后天 8 点"（因为 schedule 应该覆盖 2 天），系统无法区分。虽然 prompt 中说"today or next day"，但 LLM 可能不严格遵守。</li>
+  <li><b>同日但小时早于 base_hour：</b>如果 <code>base_hour=12</code>，LLM 返回 <code>hour=10</code>，系统判定为 cross-day（+1 day）。但如果是在同一天的上午 10:00 回顾？这在正常流程中不会发生（世界时间单调递增），但从存档恢复时可能出现。</li>
+</ol>
+
+<p>实际上，schedule 初始化的 prompt 中有 <code>must be > current hour {base_hour} today</code>，所以正常情况下 LLM 不会返回小于 base_hour 的小时。但 LLM 不总是遵守约束。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>增强跨日判断逻辑：</b>
+
+<code class="code-block"><span class="kw">def</span> _resolve_schedule_day(self, raw_hour, base_hour, base_minute, current_day):
+    <span class="cm"># 计算目标分钟数 vs 当前分钟数</span>
+    target_total = raw_hour * 60
+    current_total = base_hour * 60 + base_minute
+
+    <span class="kw">if</span> target_total &lt;= current_total:
+        <span class="cm"># 目标时间在今天已经过去 → 安排到明天</span>
+        <span class="kw">return</span> current_day + 1, raw_hour
+    <span class="kw">else</span>:
+        <span class="cm"># 在今天未来</span>
+        <span class="kw">return</span> current_day, raw_hour</code>
+
+<p style="margin-top:10px;">将分钟也纳入比较，消除边界歧义。同时记录 warning 当检测到跨日事件以便调试。</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- N8 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n8')">
+  <span class="severity-tag sev-p2">N8</span>
+  <div class="issue-title-group">
+    <div class="issue-title">无 LLM 并发控制 — 8+ 角色并行调用可能触发 API 限流</div>
+    <div class="issue-loc">story_engine.py:269 + Step 3 对话 + Step R 反思</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">并发</span>
+    <span class="issue-tag">API 限流</span>
+  </div>
+  <span class="chevron" id="chev-n8">&#9654;</span>
+</div>
+<div class="issue-body" id="n8">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>每步的 LLM 调用量分析（8 角色场景）：</p>
+<ul>
+  <li><b>Step 2 角色意图：</b>最多 8 个并行调用（asyncio.gather）</li>
+  <li><b>Step 3 对话生成：</b>取决于碰撞数，通常是 1-4 个并行</li>
+  <li><b>Step R 反思：</b>所有 active 角色同时反思（每 3 叙事步）→ 最多 8 个</li>
+  <li><b>世界事件：</b>auto_event + impact_judge = 2 个调用（每 12 步）</li>
+</ul>
+
+<p>在最坏情况：8 个意图 + 4 个对话 + 8 个反思 + 2 个事件 = <b>同一时间步中 22 个并发 LLM 调用</b>。DeepSeek API 没有公开的硬并发限制，但在高并发场景下可能出现：</p>
+<ol>
+  <li>429 Too Many Requests — 单次调用失败，虽然有 retry（指数退避），但 22 个并发重试会加剧拥堵</li>
+  <li>响应时间显著增加 — 服务器端排队</li>
+  <li>Token 消耗集中爆发 — 不利于成本控制</li>
+</ol>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>引入 asyncio.Semaphore 限制并发数：</b>
+
+<code class="code-block"><span class="cm"># 在 StoryEngine.__init__ 中:</span>
+self._llm_semaphore = asyncio.Semaphore(<span class="str">6</span>)  <span class="cm"># 最多 6 个并发</span>
+
+<span class="cm"># 在每个 LLM 调用点包裹:</span>
+<span class="kw">async</span> <span class="kw">with</span> self._llm_semaphore:
+    response = <span class="kw">await</span> llm_client.chat_async(...)</code>
+
+<p style="margin-top:10px;">这也解决了 N4 中提到的问题：如果部分调用失败/超时，不会因为 22 个重试同时爆发而导致级联失败。</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- N9 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('n9')">
+  <span class="severity-tag sev-p2">N9</span>
+  <div class="issue-title-group">
+    <div class="issue-title"><code>add_player_event</code> 双路径逻辑割裂 — 旧兼容路径写入所有角色 schedule</div>
+    <div class="issue-loc">engine/story_engine.py · Line 1156-1187</div>
+  </div>
+  <div class="issue-tags">
+    <span class="issue-tag issue-tag-new">新发现</span>
+    <span class="issue-tag">玩家干预</span>
+    <span class="issue-tag">代码清理</span>
+  </div>
+  <span class="chevron" id="chev-n9">&#9654;</span>
+</div>
+<div class="issue-body" id="n9">
+
+<div class="evidence-block">
+<div class="block-label">源码证据</div>
+<div class="evidence-text">
+<code class="code-block"><span class="kw">def</span> add_player_event(self, event_type, description, hour=None):
+    <span class="kw">if</span> hour <span class="kw">is not None</span>:   <span class="cm"># ← 旧兼容路径</span>
+        self.state.add_scheduled_event(ScheduledEvent(...))
+        <span class="kw">for</span> cid, state <span class="kw">in</span> self.state.character_states.items():
+            state.personal_schedule.append(PersonalEvent(   <span class="cm"># ← 写入所有角色！</span>
+                day=self.state.current_day,
+                hour=int(hour) % 24,
+                ...
+            ))
+        <span class="kw">return</span> ...
+
+    <span class="cm"># ← 新路径</span>
+    event, msg = world_event.add_player_event(
+        self.state.pending_player_events, ...
+    )</code>
+</div>
+</div>
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<p>当玩家传入 <code>hour</code> 参数时（旧 API 路径），事件被<b>同时写入所有角色的 personal_schedule</b>。这意味着玩家设定一个"下雨"事件在 14:00 发生，所有 8 个角色的 schedule 中都会出现这个事件。</p>
+
+<b>这与 per-agent schedule 的核心理念冲突：</b>每个角色应该有自己的时间安排，"下雨"是世界事件而非角色事件。写入所有角色的 schedule 会导致：</p>
+<ol>
+  <li>所有角色在同一时间被标记为"活跃"</li>
+  <li>LLM 为所有角色生成意图时，scheduled_event 都是"下雨"</li>
+  <li>角色原本的个人安排被覆盖</li>
+</ol>
+
+<p>正确的做法是：玩家事件应该通过 <code>pending_player_events</code> → <code>process_pending_events</code> → <code>judge_event_impact</code> 路径处理，由系统判定哪些角色受影响。</p>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>统一两条路径，废弃旧路径：</b>
+
+<ol>
+  <li>将 <code>hour</code> 参数从 <code>add_player_event</code> 中移除或标记为 deprecated</li>
+  <li>所有玩家事件统一走 <code>world_event.add_player_event</code> → <code>pending_player_events</code> 路径</li>
+  <li>如果玩家确实需要指定时间，在 <code>WorldEvent</code> 中增加 <code>scheduled_hour</code> 字段，在 <code>process_pending_events</code> 中检查时间是否到达才激活</li>
+</ol>
+
+<p style="margin-top:10px;">如果旧 API 路径仍有使用者（例如 Gradio UI 中的手动触发），先确认后再决定是修改 UI 还是保留兼容。</p>
+</div>
+</div>
+</div>
+</div>
+
+
+<!-- ================================================================== -->
+<h2>📋 优先级路线图</h2>
+
+<div class="recommendations">
+  <div class="rec-item" style="padding: 12px 16px; border-radius: 8px; margin: 8px 0; background: #fbeaf0; font-size: 13px;">
+    <div class="rec-title" style="font-weight: 500; color: #4b1528; margin-bottom: 4px;">🔴 立即修复 (N1, N2)</div>
+    <b>N1 arc_state 快照不一致</b> — 改动 3-5 行，消除逻辑隐患。统一使用 self.state.arc_state 替代局部变量。<br>
+    <b>N2 占用角色 next_event 空窗</b> — 在 occupancy 过期清理后自动写入自由活动事件，确保角色不消失。
+  </div>
+
+  <div class="rec-item" style="padding: 12px 16px; border-radius: 8px; margin: 8px 0; background: #faece7; font-size: 13px;">
+    <div class="rec-title" style="font-weight: 500; color: #4a1b0c; margin-bottom: 4px;">🟠 尽快处理 (N3, N4, N5)</div>
+    <b>N3 伏笔消费顺序</b> — 改为按 recency 消费（1 行改动）。<br>
+    <b>N4 对话异常静默吞没</b> — 显式检查 asyncio.gather 返回值，记录失败。<br>
+    <b>N5 重复事件保护</b> — 在 pop 时丢弃重复事件而非保留。
+  </div>
+
+  <div class="rec-item" style="padding: 12px 16px; border-radius: 8px; margin: 8px 0; background: #faeeda; font-size: 13px;">
+    <div class="rec-title" style="font-weight: 500; color: #412402; margin-bottom: 4px;">🟡 后续迭代 (N6-N9)</div>
+    <b>N6 prompt 加 user 消息</b> — 每个 prompt 模块加一行 user trigger。<br>
+    <b>N7 跨日判断增强</b> — 纳入分钟比较，消除边界歧义。<br>
+    <b>N8 并发控制</b> — 引入 asyncio.Semaphore(6)。<br>
+    <b>N9 双路径统一</b> — 废弃旧 add_player_event 路径。
+  </div>
+</div>
+
+<div class="meta-note" style="margin-top: 24px;">
+  <strong>与本报告的配合：</strong>第一轮审计 (workflow-audit.html) 覆盖了宏观架构问题，本报告聚焦代码层面的隐含缺陷。两份报告互补而非重叠。第一轮审计中标注"已修复"的项目（P0-1 Occupancy Model、P0-2 时间防倒退、P0-4 标准化地点、P1-1 叙事单次调用、P1-3 记忆加权、P1-4 伏笔过期、P2-2 cooldown 重入锁定、P2-3 叙事步反思计数）已通过源码确认实现正确。
+</div>
+
+</div>
+
+<script>
+function toggle(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+document.querySelectorAll('.issue-body').forEach(el => el.classList.add('open'));
+document.querySelectorAll('.chevron').forEach(el => el.classList.add('open'));
+</script>
+</body>
+</html>

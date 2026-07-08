@@ -1,0 +1,2051 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story-Sim 流程逻辑合理性分析</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; background: #f8f7f4; color: #2c2c2a; line-height: 1.75; font-size: 14px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 24px; font-weight: 600; margin-bottom: 6px; color: #1a1a1a; }
+h2 { font-size: 18px; font-weight: 600; margin: 40px 0 16px; padding: 10px 16px; background: #fff; border-left: 4px solid #534ab7; border-radius: 4px; }
+h3 { font-size: 15px; font-weight: 600; margin: 24px 0 10px; color: #3c3489; }
+h4 { font-size: 14px; font-weight: 600; margin: 16px 0 8px; color: #444441; }
+.subtitle { font-size: 13px; color: #888780; margin-bottom: 32px; }
+
+.overall-badge {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+}
+.badge-good { background: #e1f5ee; color: #0f6e56; }
+.badge-caution { background: #faeeda; color: #854f0b; }
+.badge-risk { background: #fbeaf0; color: #993556; }
+
+.module-card {
+  background: white;
+  border-radius: 12px;
+  border: 0.5px solid #d3d1c7;
+  margin: 24px 0;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.module-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+  border-bottom: 0.5px solid #e8e6df;
+}
+.module-header:hover { background: #f1efe8; }
+.module-id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+.module-title { font-weight: 600; font-size: 16px; flex: 1; }
+.module-subtitle { font-size: 12px; color: #888780; margin-left: 8px; }
+.module-grade {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.grade-A { background: #e1f5ee; color: #0f6e56; }
+.grade-B { background: #e6f1fb; color: #185fa5; }
+.grade-C { background: #faeeda; color: #854f0b; }
+
+.module-body { padding: 0 24px 24px; display: none; }
+.module-body.open { display: block; }
+
+.analysis-section { margin: 20px 0; }
+.analysis-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888780;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.pro-con-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.pro-box, .con-box {
+  padding: 14px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.pro-box { background: #e1f5ee; border-left: 3px solid #0f6e56; }
+.con-box { background: #faece7; border-left: 3px solid #993c1d; }
+.box-label { font-weight: 600; font-size: 12px; margin-bottom: 6px; }
+.pro-box .box-label { color: #0f6e56; }
+.con-box .box-label { color: #993c1d; }
+
+.issue-item {
+  padding: 12px 16px;
+  border-left: 3px solid #e8c96a;
+  background: #fdfaee;
+  border-radius: 0 8px 8px 0;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.issue-item.severe { border-left-color: #d85a30; background: #fef4f0; }
+.issue-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #444441;
+}
+.issue-title .severity { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 8px; }
+.severity-high { background: #fbeaf0; color: #993556; }
+.severity-mid { background: #faeeda; color: #854f0b; }
+.severity-low { background: #e1f5ee; color: #0f6e56; }
+
+.alternative-box {
+  padding: 14px 16px;
+  background: #f0effc;
+  border-left: 3px solid #534ab7;
+  border-radius: 0 8px 8px 0;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.alt-label { font-weight: 600; color: #534ab7; margin-bottom: 6px; }
+
+.keyword { 
+  background: #f1efe8;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #534ab7;
+}
+
+.or-divider {
+  text-align: center;
+  color: #b4b2a9;
+  font-size: 12px;
+  padding: 4px 0;
+  margin: 8px 0;
+}
+
+.quick-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 24px;
+}
+.quick-nav a {
+  font-size: 12px;
+  padding: 4px 12px;
+  background: white;
+  border: 0.5px solid #d3d1c7;
+  border-radius: 16px;
+  color: #534ab7;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.quick-nav a:hover { background: #eeedfe; border-color: #534ab7; }
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.summary-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: #f1efe8;
+  font-weight: 600;
+  font-size: 12px;
+  border-bottom: 0.5px solid #d3d1c7;
+}
+.summary-table td {
+  padding: 8px 12px;
+  border-bottom: 0.5px solid #e8e6df;
+  vertical-align: top;
+}
+.summary-table tr:last-child td { border-bottom: none; }
+
+.flaw-card {
+  background: #fef4f0;
+  border: 0.5px solid #e8c96a;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.flaw-card h4 { margin: 0 0 8px; color: #993c1d; }
+.flaw-card p { font-size: 13px; margin: 4px 0; }
+
+.chevron {
+  transition: transform 0.2s;
+  font-size: 12px;
+  color: #888780;
+}
+.chevron.open { transform: rotate(90deg); }
+
+@media (max-width: 768px) {
+  .pro-con-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Story-Sim 流程逻辑合理性分析</h1>
+<p class="subtitle">仅关注逻辑实现本身，不评估代码质量 | 基于 workflow-overview.html + story_engine.py/world_sim.py/memory.py/relationship.py/world_event.py 源码 | 方案已综合 workflow-audit-v2（N1-N9 详细方案）</p>
+
+<!-- 快速导航 -->
+<div class="quick-nav">
+  <a href="#overall">总体评价</a>
+  <a href="#m0">故事初始化</a>
+  <a href="#ms">日程初始化</a>
+  <a href="#m1">世界时钟</a>
+  <a href="#me">世界事件</a>
+  <a href="#m2">角色意图</a>
+  <a href="#m3">世界模拟</a>
+  <a href="#ma">弧追踪</a>
+  <a href="#m4">状态更新</a>
+  <a href="#m5">叙事编排</a>
+  <a href="#mr">反思机制</a>
+  <a href="#cross">跨模块问题</a>
+  <a href="#summary">总结</a>
+</div>
+
+<!-- ============================================================ -->
+<!-- 总体评价 -->
+<!-- ============================================================ -->
+<h2 id="overall">总体评价</h2>
+
+<div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+  <div style="flex:1; min-width:200px; background:white; border-radius:10px; padding:16px; border:0.5px solid #d3d1c7;">
+    <div style="font-size:24px; font-weight:700; color:#0f6e56;">7.5<span style="font-size:14px; font-weight:400;">/10</span></div>
+    <div style="font-size:12px; color:#888780; margin-top:4px;">整体逻辑合理性</div>
+  </div>
+  <div style="flex:1; min-width:200px; background:white; border-radius:10px; padding:16px; border:0.5px solid #d3d1c7;">
+    <div style="font-size:24px; font-weight:700; color:#185fa5;">四层流水线</div>
+    <div style="font-size:12px; color:#888780; margin-top:4px;">架构清晰，职责分明</div>
+  </div>
+  <div style="flex:1; min-width:200px; background:white; border-radius:10px; padding:16px; border:0.5px solid #d3d1c7;">
+    <div style="font-size:24px; font-weight:700; color:#854f0b;">7个</div>
+    <div style="font-size:12px; color:#888780; margin-top:4px;">结构性问题（详见下文）</div>
+  </div>
+</div>
+
+<p style="font-size:13px;">
+四层流水线架构（事件调度 → 角色决策 → 世界模拟 → 叙事编排）的核心思路是正确的，借鉴了 Stanford Generative Agents 的核心理念，并针对"跑团式群像剧"做了务实的适配。per-agent schedule 调度机制、Occupancy Model、弧追踪状态机等都是合理的工程设计。但在<b>关系系统闭环缺失、碰撞判定粒度不足、LLM输出一致性、伏笔机制脆弱</b>等方面存在值得改进的结构性问题。
+</p>
+
+<!-- ============================================================ -->
+<!-- 模块 0：故事初始化 -->
+<!-- ============================================================ -->
+<h2 id="m0">模块 0：故事初始化</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod0')">
+    <span class="module-id" style="background:#eeedfe; color:#534ab7;">0</span>
+    <span class="module-title">init_story()<span class="module-subtitle">LLM 生成开场白 + 初始关系矩阵</span></span>
+    <span class="module-grade grade-A">A</span>
+    <span class="chevron" id="chev-mod0">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod0">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      整体设计合理：将"初始叙事生成"和"初始关系确定"打包为一个 LLM 调用，减少请求次数。生成后写入 timeline[0] 并将叙事追加到 narrative_full.txt。这是标准的 init 模式。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>开场叙事 + 关系矩阵一次性生成，避免分步调用的不一致风险</li>
+            <li>tone 和 character_arc_outline 在 prompt 中可选注入，灵活自然</li>
+            <li>关系值用 delta 而非绝对值应用：初始全50，LLM返回的值通过 trust - 50 转为增量</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>名称匹配依赖精确字符串比较，LLM 稍有不规范即失效</li>
+            <li>关系矩阵范围 -100~100，但碰撞阈值是 0~100 的逻辑，两者数值语义错位</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">名称模糊匹配缺失 <span class="severity severity-mid">中</span></div>
+        <p><span class="keyword">_find_char_id_by_name()</span> 使用 <code>cfg.name == name</code> 精确匹配。LLM 可能返回"林美雪"而配置中是"林 美雪"，或返回日文汉字对应关系错位。一旦匹配失败，关系数据静默丢失，无报错。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>双层策略：优先 character_id，兜底模糊匹配</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — init_story() 中的名称匹配增强<br>
+        import re<br>
+        <br>
+        def _resolve_character_ref(self, name_str, configs):<br>
+        &nbsp;&nbsp;# 1. 精确匹配（最快）<br>
+        &nbsp;&nbsp;for cfg in configs:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if cfg.name == name_str or cfg.name.replace(" ", "") == name_str:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return cfg.character_id<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 2. 移除空格和特殊字符后匹配<br>
+        &nbsp;&nbsp;clean_name = re.sub(r'[\s\u3000]', '', name_str)<br>
+        &nbsp;&nbsp;for cfg in configs:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;clean_cfg = re.sub(r'[\s\u3000]', '', cfg.name)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if clean_name == clean_cfg:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;logger.warning(f"名称模糊匹配: '{name_str}' → '{cfg.name}'")<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return cfg.character_id<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 3. 编辑距离兜底（需要 pip install python-Levenshtein）<br>
+        &nbsp;&nbsp;try:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;from Levenshtein import distance<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;best = min(configs, key=lambda c: distance(clean_name, c.name))<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if distance(clean_name, best.name) <= 2:  # 2字符以内差异<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;logger.warning(<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;f"编辑距离匹配: '{name_str}' → '{best.name}' "<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;f"(距离={distance(clean_name, best.name)})")<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return best.character_id<br>
+        &nbsp;&nbsp;except ImportError:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;pass<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 4. 全部失败 — 打 error 日志，不静默丢弃<br>
+        &nbsp;&nbsp;logger.error(f"无法匹配角色名称: '{name_str}'，可用角色: "<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;f"{[c.name for c in configs]}")<br>
+        &nbsp;&nbsp;return None<br>
+        <br>
+        # 在 init prompt 中也优化：要求 LLM 返回 character_id 而非 name<br>
+        # prompt 中追加：<br>
+        # "请使用 character_id 而非角色名来指代角色。<br>
+        #  可用 character_id: {[c.character_id for c in configs]}"
+        </p>
+
+        <p style="margin-top:8px;"><b>改动范围：</b>story_engine.py init_story() 中的名称解析逻辑 + init prompt 微调。可选依赖 python-Levenshtein（不安装也能工作，只是少一层兜底）。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">关系数值语义与碰撞阈值不衔接 <span class="severity severity-low">低</span></div>
+        <p>关系 trust/affection 范围是 -100~100，但碰撞判定中"无关系"（rel is None）被当作 PASSING。初始化时所有关系对都有记录（初始50），意味着不存在"无关系"状态。这取消了一个有意义的可能性：两个角色还不认识 → 首次见面是特殊事件。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>思路：</b>在初始化时不为所有角色对预设关系，让"未认识"成为默认状态。</p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # relationship.py — 增加"首次相遇"判定<br>
+        def get_or_create_relationship(self, cid_a, cid_b):<br>
+        &nbsp;&nbsp;key = frozenset([cid_a, cid_b])<br>
+        &nbsp;&nbsp;if key not in self.relations:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;# 不存在 → "不认识"状态<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return None, RelationshipStatus.NOT_MET<br>
+        &nbsp;&nbsp;return self.relations[key], RelationshipStatus.KNOWN<br>
+        <br>
+        # world_sim.py — _judge_encounter_type() 增加 NOT_MET 处理<br>
+        if status == RelationshipStatus.NOT_MET:<br>
+        &nbsp;&nbsp;# 首次相遇 → 自动创建一个初始关系（trust=50, affection=50）<br>
+        &nbsp;&nbsp;self.relationship.create_relationship(cid_a, cid_b, <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;trust=50, affection=50, source="first_meeting")<br>
+        &nbsp;&nbsp;# 触发 "FIRST_MEETING" 特殊碰撞类型<br>
+        &nbsp;&nbsp;return "FIRST_MEETING"<br>
+        <br>
+        # init_story() 改动：<br>
+        # 不再为所有角色对预设关系<br>
+        # 只对 LLM 输出中明确有初始关系的对创建关系条目<br>
+        # 其他对保持 NOT_MET 状态，等待首次相遇触发
+        </p>
+
+        <p style="margin-top:8px;"><b>叙事效果：</b>FIRST_MEETING 类型产生特殊的叙事模式——"两人的目光第一次交汇"、"第一次打招呼"——这在校园剧中是非常有价值的叙事素材。</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 S：日程初始化 -->
+<!-- ============================================================ -->
+<h2 id="ms">模块 S：日程初始化</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modS')">
+    <span class="module-id" style="background:#e1f5ee; color:#0f6e56;">S</span>
+    <span class="module-title">init_story_schedule()<span class="module-subtitle">LLM 生成角色个人时间表</span></span>
+    <span class="module-grade grade-B">B</span>
+    <span class="chevron" id="chev-modS">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modS">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      Per-agent schedule 是合理的调度策略，让每个角色自主决定时间，世界时钟"跳"到最早时间点。但初始化 prompt 中硬编码了 <span class="keyword">{base_hour + 2}</span> 等示例值，这可能引导 LLM 偏好这些特定偏移量，削弱日程的自然多样性。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>每个角色独立生成日程，尊重角色自主性</li>
+            <li>跨日处理逻辑（hour ≤ base_hour → 次日）</li>
+            <li>LLM 失败时有 fallback 硬编码时间表兜底</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>prompt 示例值（+2/+4）可能引导 LLM 输出趋同</li>
+            <li>跨日判定逻辑在边界情况有误判风险</li>
+            <li>各角色日程独立生成，缺少"大家一起上课"的协调</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">跨日逻辑的边界歧义 <span class="severity severity-mid">中</span></div>
+        <p>代码中使用 <code>actual_hour &lt;= base_hour → 次日</code> 判断跨日。但 LLM 被要求"小时必须 &gt; 当前小时"。假设 base_hour=20（晚8点），LLM 返回 hour=22（晚10点，同一天），判断 22 > 20 → 当天；但 LLM 返回 hour=8（次日早8点），判断 8 ≤ 20 → 次日。这个逻辑依赖 LLM 正确理解"跨日"概念，而 LLM 可能不遵循，导致时间错乱。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 综合方案 — 参考 workflow-audit-v2 N7</div>
+        <p><b>方案 A（推荐）：使用总分钟数比较替代简单的小时比较</b></p>
+        <p>workflow-audit-v2 N7 指出当前 <code>actual_hour &lt;= base_hour → 次日</code> 的判定在边界情况下有歧义。例如 base_hour=12、base_minute=30，LLM 返回 hour=12、minute=15——按小时比较 12≤12→判定为次日，但实际上 12:15 还在 12:30 之前，应该是今天更早的时间。</p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — _resolve_schedule_day() 替代简单比较<br>
+        def _resolve_schedule_day(self, raw_hour, base_hour, base_minute, current_day):<br>
+        &nbsp;&nbsp;target_total = raw_hour * 60  # 可扩展为 raw_hour*60 + raw_minute<br>
+        &nbsp;&nbsp;current_total = base_hour * 60 + base_minute<br>
+        &nbsp;&nbsp;if target_total &lt;= current_total:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return current_day + 1, raw_hour  # 今天已过去 → 明天<br>
+        &nbsp;&nbsp;else:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return current_day, raw_hour  # 今天未来
+        </p>
+        <p>将分钟也纳入比较，消除边界歧义。同时记录 warning 当检测到跨日事件以便调试。</p>
+
+        <p style="margin-top:8px;"><b>方案 B（更彻底）：prompt 中要求 LLM 返回 relative_hour_offset</b></p>
+        <p>在 prompt 中显式要求 LLM 返回 <span class="keyword">relative_hour_offset</span>（相对当前小时偏移，如 +2 表示 2 小时后），或直接使用 unix 风格的总分钟数。这样无需在 Python 端推断跨日，LLM 的意图更明确。但增加了 prompt 复杂度，且 LLM 计算偏移时可能仍有误差。</p>
+
+        <p style="margin-top:8px;"><b>推荐方案 A</b>——改动最小，逻辑最清晰。与 audit-v2 N7 方案一致。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">群体日程缺少协调 <span class="severity severity-low">低</span></div>
+        <p>如果这是一个校园剧，角色们理论上应该有共享课程、午休等时间段。目前每个角色独立生成日程，可能没有人同时出现在教室——这削弱了碰撞概率，减少了互动机会。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>核心思路：</b>先生成学校作息框架（schedule template），角色在框架的"自由时段"内个性化填充。</p>
+        
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # config.py — 学校作息框架（系统级，非 LLM 生成）<br>
+        SCHOOL_SCHEDULE_TEMPLATE = {<br>
+        &nbsp;&nbsp;"上午课":   {"start": "08:30", "end": "12:00", "location": "教室",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"shared": True},  # all students<br>
+        &nbsp;&nbsp;"午休":     {"start": "12:00", "end": "13:00", "location": "食堂/中庭",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"shared": True},<br>
+        &nbsp;&nbsp;"下午课":   {"start": "13:00", "end": "15:30", "location": "教室",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"shared": True},<br>
+        &nbsp;&nbsp;"社团/自由": {"start": "15:30", "end": "18:00",   # 角色可个性化<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"location": "——", "shared": False},<br>
+        &nbsp;&nbsp;"放学":     {"start": "18:00", "end": "22:00",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"location": "——", "shared": False},<br>
+        }<br>
+        <br>
+        # init_story_schedule() — 两阶段生成<br>
+        # Phase 1: 将 shared=True 的时段写入所有角色 schedule<br>
+        for slot_name, slot in SCHOOL_SCHEDULE_TEMPLATE.items():<br>
+        &nbsp;&nbsp;if slot["shared"]:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;for cid in all_characters:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;add_event(cid, slot["start"], slot["end"],<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;slot["location"], slot_name)<br>
+        <br>
+        # Phase 2: 让 LLM 在 shared=False 的自由时段内个性化填充<br>
+        # prompt 改为："在以下时间段内安排你的活动：15:30-18:00, 18:00-22:00"<br>
+        # 上课时段已固定，LLM 不需要（也不能）修改
+        </p>
+
+        <p style="margin-top:8px;"><b>效果：</b></p>
+        <ul style="margin:4px 0 0 16px; font-size:12px;">
+          <li>上课时间（8:30-12:00, 13:00-15:30）所有学生自动在"教室"→ 碰撞率 100%</li>
+          <li>午休期间所有学生在"食堂/中庭"区域 → 70-80% 碰撞率</li>
+          <li>自由时段（社团/放学后）角色仍有个性化空间</li>
+          <li>不需要 LLM 理解"同步"概念，系统规则保证</li>
+          <li>如果角色设定为"不良学生"→ 可在 prompt 中允许跳过上课（个性 vs 规则）</li>
+        </ul>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 1：世界时钟推进 -->
+<!-- ============================================================ -->
+<h2 id="m1">Step 1：世界时钟推进</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod1')">
+    <span class="module-id" style="background:#faeeda; color:#854f0b;">1</span>
+    <span class="module-title">_get_next_world_time() + Occupancy Model<span class="module-subtitle">纯规则：最早时间点 + 占用管理</span></span>
+    <span class="module-grade grade-A">A</span>
+    <span class="chevron" id="chev-mod1">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod1">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      这是整个系统最稳健的模块。算法简单精确：取所有角色 schedule 的最小值，精确匹配的角色为"活跃"，弹出事件后推进。Occupancy Model 补充了"进行中活动不被中断"的约束。核心逻辑没有问题。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>时间推进完全由角色日程驱动，无硬编码限制（符合用户铁律）</li>
+            <li>Occupancy Model 防止世界时钟打断正在进行的事件</li>
+            <li>精确到分钟粒度，角色自主安排</li>
+            <li>schedule 为空时自动重新生成 + fallback</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>精确匹配（day/hour/minute 三者全等）可能漏掉相近时间点的并发</li>
+            <li>非活跃角色长时间无更新的"僵尸角色"问题</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">精确匹配导致"形离实合"的角色无法互动 <span class="severity severity-mid">中</span></div>
+        <p>如果角色A在 8:00 有事件，角色B在 8:05 有事件，两人同去图书馆——世界时钟先推进到 8:00，A 执行；再推进到 8:05，B 执行。两者不会被视为"活跃在同一时刻"，因此<b>永远不会在图书馆相遇</b>。这在 narrative 上可能不合理：5 分钟的差异在真实故事中近乎同时。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>方案：在 _get_next_world_time() 中引入时间窗口合并</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — 增强 _get_next_world_time()<br>
+        TIME_WINDOW_MINUTES = 5  # 可配置<br>
+        <br>
+        def _get_next_world_time(self):<br>
+        &nbsp;&nbsp;# Step 1: 找到最早时间点 t_min（保持现有逻辑）<br>
+        &nbsp;&nbsp;t_min = _find_earliest_time()<br>
+        &nbsp;&nbsp;if t_min is None: return None<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# Step 2: 时间窗口合并<br>
+        &nbsp;&nbsp;t_window_end = t_min + TIME_WINDOW_MINUTES  # 以总分钟数表示<br>
+        &nbsp;&nbsp;active_cids = []<br>
+        &nbsp;&nbsp;for cid, state in character_states.items():<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;for evt in state.personal_schedule[:1]:  # 只看每个角色的下一个事件<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;evt_time = _to_total_minutes(evt.day, evt.hour, evt.minute)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if t_min <= evt_time <= t_window_end:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;active_cids.append(cid)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break  # 已纳入，不检查该角色后续事件<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 但世界时钟保持跳转到 t_min（不跳跃）<br>
+        &nbsp;&nbsp;# 合并只影响"被视为活跃"的角色集合，不影响时间推进<br>
+        &nbsp;&nbsp;return t_min, active_cids<br>
+        <br>
+        # 效果：A在8:00去图书馆，B在8:05去图书馆<br>
+        # → t_min=8:00, t_window_end=8:05<br>
+        # → active_cids = [A, B] → 两人都在图书馆，碰撞检测工作！<br>
+        # 世界时钟仍跳转到 8:00（t_min），B 的 8:05 事件被提前弹出<br>
+        # B 会在事件被消费后 8:00 的下一个事件是 schedule 中的下一条
+        </p>
+
+        <p style="margin-top:8px;"><b>注意事项：</b></p>
+        <ul style="margin:4px 0 0 16px; font-size:12px;">
+          <li>窗口内的角色被弹出时，其下一个 event 也被消费（pop），确保不会回头</li>
+          <li>Occupancy Model 仍然生效：如果角色在窗口内但被占用，不会被纳入活跃列表</li>
+          <li>窗口大小建议 5 分钟，可通过 config.py 调整</li>
+          <li>过大的窗口（>15 分钟）会导致"时间作弊"感——B 明明 15 分钟后才到，却被提前拉到一起</li>
+        </ul>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">非活跃角色的"僵尸"状态 <span class="severity severity-low">低</span></div>
+        <p>不在 active_char_ids 中的角色仅被赋予占位 intent（importance=2），不发生位置变化、心情变化。如果角色A的日程到 12:00 就结束了，而世界推进到 20:00（其他角色还在活动），A 会停留在最后的位置/心情/状态，连续多步没有任何更新。这在长期运行中可能产生不自然的"被遗忘"角色。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 综合方案 — 参考 workflow-audit-v2 N2</div>
+        <p><b>方案 A（立即修复）：占用结束后自动写入恢复事件</b></p>
+        <p>workflow-audit-v2 N2 发现了一个更具体的"僵尸"成因：当角色被 Occupancy Model 占用时，代码跳过 LLM 意图生成且不写入 next_event。如果占用覆盖了 schedule 中最后一个事件，角色会在占用结束后从活跃列表消失。</p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — 在 occupancy 过期清理后追加<br>
+        for cid in expired:<br>
+        &nbsp;&nbsp;occ = self.state.occupancy[cid]<br>
+        &nbsp;&nbsp;busy_until = occ.get("busy_until")<br>
+        &nbsp;&nbsp;# 在占用结束时间点之后写入一个自由活动事件<br>
+        &nbsp;&nbsp;state = self.state.character_states[cid]<br>
+        &nbsp;&nbsp;state.personal_schedule.append(PersonalEvent(<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;day=busy_until[0], hour=busy_until[1], minute=busy_until[2] + 1,<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;duration=60, description="自由活动",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;importance=3, source="auto",<br>
+        &nbsp;&nbsp;))<br>
+        &nbsp;&nbsp;state.personal_schedule.sort(...)<br>
+        &nbsp;&nbsp;logger.debug(f"释放 {cid} 占用后写入自由活动事件")
+        </p>
+        <p>确保每个角色在任何时刻都有一个"未来事件"，避免从调度系统消失。</p>
+
+        <p style="margin-top:8px;"><b>方案 B（补充）：对非活跃角色引入被动状态衰减</b></p>
+        <p>每 N 步（如 5 步）自动更新非活跃角色的身体状态（physical_condition 自然恢复）、心情（mood 向中性回弹）。或至少为非活跃角色自动重新生成 schedule。</p>
+
+        <p style="margin-top:8px;"><b>推荐先做方案 A</b>——直接解决 N2 发现的具体 bug，改动小、效果明确。</p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 E：世界事件处理 -->
+<!-- ============================================================ -->
+<h2 id="me">旁路：世界事件处理</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modE')">
+    <span class="module-id" style="background:#fbeaf0; color:#993556;">E</span>
+    <span class="module-title">process_pending_events() + auto_event<span class="module-subtitle">LLM 生成系统事件 + 影响判定</span></span>
+    <span class="module-grade grade-B">B</span>
+    <span class="chevron" id="chev-modE">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modE">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      世界事件系统分两层：玩家主动干预（plot event / environment）和系统自动触发（每12步）。核心逻辑合理，但有明显的"结果未消费"问题。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>pending → active 两阶段，新事件不会立即生效</li>
+            <li>事件有生命周期（大事件5步，环境3步），自动过期</li>
+            <li>按 description 精确去重，防止重复事件</li>
+            <li>auto_event 考虑了 story_summary + arc_outline + past_events</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>affected_characters 判定结果未被充分使用</li>
+            <li>玩家事件 importance=8 固定值过于粗暴</li>
+            <li>auto_event 间隔固定 12 步，不适应故事节奏</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item severe">
+        <div class="issue-title">affected_characters 判定结果基本被浪费 <span class="severity severity-high">高</span></div>
+        <p><span class="keyword">_judge_event_impact()</span> 调用 LLM 精细判断哪些角色受事件影响（返回 would_be_involved / how_affected / likely_reaction），但结果仅写入 <code>event.affected_characters</code>，在主循环中再未使用。角色的 intent 生成 prompt 中传入了 <code>active_events</code>，但没有利用 affected_characters 做差异化——所有角色看到同一份事件描述，LLM 自行判断是否受影响。等于白做了一个 LLM 调用。</p>
+        <p style="font-size:11px; color:#888780;">🆕 本报告中已提供代码级方案（原创，audit-v2 未覆盖此问题）</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        <p>核心思路：将 <span class="keyword">_judge_event_impact()</span> 的 LLM 输出从"只存不用"变为 Step 2 意图生成的<b>差异化上下文</b>。</p>
+        
+        <p><b>Step 1：扩展 _judge_event_impact 输出格式</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # world_event_judge.py — prompt 输出结构<br>
+        {<br>
+        &nbsp;&nbsp;"affected_characters": [<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;{<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"character_id": "akira",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"involvement": "direct",  // direct | indirect | bystander<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"how_affected": "亲眼目睹事件发生",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"likely_reaction": "震惊并试图帮助",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"importance_modifier": 2  // 事件对该角色的重要性加权<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;},<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;{<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"character_id": "yuki",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"involvement": "indirect",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"how_affected": "听说后感到担忧",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"likely_reaction": "发消息询问情况",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"importance_modifier": 1<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+        &nbsp;&nbsp;]<br>
+        }
+        </p>
+
+        <p style="margin-top:8px;"><b>Step 2：在 Step 2 意图生成中注入差异化上下文</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # character_action.py — 构建事件上下文时区分角色<br>
+        affected_info = _get_character_event_context(cid, active_events)<br>
+        <br>
+        if affected_info["involvement"] == "direct":<br>
+        &nbsp;&nbsp;event_line = f"⚠️ 你被以下事件直接影响：{event.desc}。"<br>
+        &nbsp;&nbsp;event_line += f"你的反应：{affected_info['likely_reaction']}"<br>
+        elif affected_info["involvement"] == "indirect":<br>
+        &nbsp;&nbsp;event_line = f"📢 你听说了：{event.desc}。你的感受：{affected_info['how_affected']}"<br>
+        else:<br>
+        &nbsp;&nbsp;event_line = f"💬 传闻：{event.desc}。"  # 未受影响角色只模糊感知<br>
+        <br>
+        # 事件对受影响角色的 intent importance 加权<br>
+        event_importance_bonus = affected_info.get("importance_modifier", 0)
+        </p>
+
+        <p style="margin-top:8px;"><b>Step 3：未受影响角色也应有"感知"而非"不知情"</b></p>
+        <p>即使角色不在 affected_characters 列表中，也可以传递低分辨率的事件信息（"校园里在传言..."），模拟真实社会中的信息传播。这比当前的"所有角色看到同一份事件描述"更真实。</p>
+
+        <p style="margin-top:8px;"><b>改动范围：</b>world_event_judge.py（prompt）+ character_action.py（上下文构建）+ story_engine.py（传递 affected_characters 到 intent 生成）。无需新增 LLM 调用，仅改变数据流。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">玩家事件强制 importance=8 过于粗暴 <span class="severity severity-mid">中</span></div>
+        <p>玩家插入的事件全部 importance=8（≥7 触发 cooldown），这意味着<b>任何玩家干预都会触发 cooldown 状态</b>。如果玩家连续添加多个事件，整个故事的叙事节奏会反复进入 cooldown，反而削弱了"高压事件"的特殊感。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 可选方案</div>
+        <p>玩家事件 importance 可选（默认 8 但可调），或根据事件类型差异化：plot_event=8, environment=5, flavor=3。给玩家控制权。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">auto_event 间隔固定不适应节奏 <span class="severity severity-low">低</span></div>
+        <p>无论剧情紧张还是平淡，12步固定触发一次。高张力期间可能希望减少系统干扰，平淡期可能需要更多推动。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>方案：基于近期 importance 移动平均的动态阈值</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — auto_event 触发逻辑改为动态间隔<br>
+        AUTO_EVENT_BASE_INTERVAL = 12  # 基础间隔<br>
+        AUTO_EVENT_MIN_INTERVAL = 6    # 最短间隔（平淡期可缩短）<br>
+        AUTO_EVENT_MAX_INTERVAL = 20   # 最长间隔（高张力期可延长）<br>
+        <br>
+        def _should_trigger_auto_event(self):<br>
+        &nbsp;&nbsp;# 计算近 10 步的 importance 移动平均<br>
+        &nbsp;&nbsp;recent_imps = self.state.recent_max_importances[-10:]<br>
+        &nbsp;&nbsp;avg_imp = sum(recent_imps) / len(recent_imps) if recent_imps else 4<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 映射：高平均值 → 长间隔，低平均值 → 短间隔<br>
+        &nbsp;&nbsp;# avg_imp=8(高张力) → interval=20, avg_imp=2(平淡) → interval=6<br>
+        &nbsp;&nbsp;dynamic_interval = AUTO_EVENT_MIN_INTERVAL + \<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;(AUTO_EVENT_MAX_INTERVAL - AUTO_EVENT_MIN_INTERVAL) * \<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;min(avg_imp / 8.0, 1.0)  # clamp to [0, 1]<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;return self.state.steps_since_auto_event >= dynamic_interval<br>
+        <br>
+        # 还需要记录每一步的 max_importance<br>
+        # 在 advance_one_step() 末尾：<br>
+        self.state.recent_max_importances.append(max_importance)<br>
+        if len(self.state.recent_max_importances) > 20:<br>
+        &nbsp;&nbsp;self.state.recent_max_importances = \<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;self.state.recent_max_importances[-20:]  # 只保留最近 20 步
+        </p>
+
+        <p style="margin-top:8px;"><b>效果说明：</b></p>
+        <ul style="margin:4px 0 0 16px; font-size:12px;">
+          <li>高张力期（近 10 步 avg_imp≈7.5）→ interval≈19 步 → 系统少干预，让角色自己处理</li>
+          <li>平淡期（近 10 步 avg_imp≈2.5）→ interval≈8 步 → 系统多推动，制造新事件</li>
+          <li>过渡平滑：没有硬切换，interval 随 avg_imp 连续变化</li>
+          <li>与弧状态也有呼应：cooldown 期间已经是高 tension，动态间隔自动延长</li>
+        </ul>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 2：角色意图生成 -->
+<!-- ============================================================ -->
+<h2 id="m2">Step 2：角色意图生成</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod2')">
+    <span class="module-id" style="background:#e6f1fb; color:#185fa5;">2</span>
+    <span class="module-title">_generate_character_intent()<span class="module-subtitle">LLM xN 并行：记忆检索 → scratchpad → 意图输出</span></span>
+    <span class="module-grade grade-B">B</span>
+    <span class="chevron" id="chev-mod2">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod2">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      意图生成是系统的核心，上下文注入丰富（记忆/关系/快照/scratchpad/弧光大纲）。Occupancy 角色的跳过逻辑合理。但 LLM 输出的不确定性是一个持续的薄弱点。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>上下文注入全面：记忆(8条) + 关系 + 世界快照 + scratchpad + 弧光</li>
+            <li>并行 asyncio.gather，效率高</li>
+            <li>异常时降级为"留在原地"占位意图</li>
+            <li>Null 防御清洗（已知 bug 模式已修复）</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>记忆检索的关键词匹配在调用时未传入 query_keywords</li>
+            <li>非活跃角色无状态更新，产生"僵尸"</li>
+            <li>next_event 时间参数无合理性校验（只防倒退不防跳跃）</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item severe">
+        <div class="issue-title">记忆检索缺少查询关键词 <span class="severity severity-high">高</span></div>
+        <p><span class="keyword">retrieve_memories()</span> 的签名支持 <code>query_keywords</code> 参数用于相关性匹配，但 <span class="keyword">_generate_character_intent()</span> 调用时<b>从未传入 query_keywords</b>。这意味着记忆检索只依赖近期性和重要性两个维度，缺少"与当前情境相关性"这一关键维度。角色可能检索到"昨天吃了午饭"这种毫无关联的记忆，而非"上次在这里遇到了谁"这类情境相关的记忆。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>方案 A（推荐，零 LLM 调用）：基于当前情境的关键词自动提取</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — _generate_character_intent() 中，在检索前提取关键词<br>
+        def _extract_query_keywords(cid, state, intent_input):<br>
+        &nbsp;&nbsp;keywords = []<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 1. 当前地点（最直接的情境锚点）<br>
+        &nbsp;&nbsp;loc = state.character_states[cid].current_location<br>
+        &nbsp;&nbsp;keywords.extend([loc, f"在{loc}"])<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 2. 当前活动（从 scheduled_event 提取）<br>
+        &nbsp;&nbsp;event_desc = intent_input.get("scheduled_event", "")<br>
+        &nbsp;&nbsp;if event_desc:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;keywords.extend(event_desc.split()[:3])  # 取前3个词<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 3. 当前情绪 + 最近关心的人<br>
+        &nbsp;&nbsp;mood = state.character_states[cid].mood<br>
+        &nbsp;&nbsp;keywords.append(mood)<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 4. 关系密切的角色名（trust > 60 的人）<br>
+        &nbsp;&nbsp;close_contacts = [name for rid in relationships<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if relationships[rid].trust > 60 <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for name in state.char_names[rid]]<br>
+        &nbsp;&nbsp;keywords.extend(close_contacts[:2])<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;return list(set(keywords))  # 去重，通常 5-10 个关键词<br>
+        <br>
+        # 然后在调用检索时传入<br>
+        keywords = _extract_query_keywords(cid, state, intent_input)<br>
+        recent_memories = retrieve_memories(<br>
+        &nbsp;&nbsp;cid, memories, <br>
+        &nbsp;&nbsp;query_keywords=keywords,  # ← 终于传入了！<br>
+        &nbsp;&nbsp;max_count=8<br>
+        )
+        </p>
+
+        <p style="margin-top:8px;"><b>方案 B（更精确，增加 1 次 LLM 调用）：用 LLM 生成检索意图</b></p>
+        <p>先调用一次轻量 LLM（temperature=0，max_tokens=100），让 LLM 输出"基于当前情境，角色最可能想起哪些事？"的检索查询。这更像 Stanford Generative Agents 的做法：反思式检索。但增加 LLM 调用成本。建议在关键词方案（方案 A）效果不佳时再启用。</p>
+
+        <p style="margin-top:8px;"><b>记忆评分公式保持不变：</b><code>recency × 1.5 + importance + keyword_match_bonus</code>。关键词匹配加分建议 +5（与 recency×1.5 = 近期 3 步内约 +4.5 量级相当，不会喧宾夺主）。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">LLM 输出时间参数无合理性校验 <span class="severity severity-mid">中</span></div>
+        <p>防倒退校验只确保 next_event 不早于当前时间（+5min 最小偏移）。但 LLM 可能返回 72 小时后的事件——这意味着角色会"消失"三天，期间没有任何活动。没有上限校验。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 可选方案</div>
+        <p>增加上限校验：如果 next_event 超过当前时间 + N 小时（如 8 小时），自动 clamp 到合理上限并打 warning 日志。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">并行 LLM 调用导致角色间信息隔离 <span class="severity severity-mid">中</span></div>
+        <p>所有活跃角色的 intent 是并行生成的，这意味着角色 A 不知道角色 B 在同一时刻打算做什么。这在逻辑上是合理的（角色不应该读心），但可能导致冲突意图（两人同时要去同一个独占地点，如图书馆的某个座位）。Step 3 的碰撞检测在 location 层面处理了这个问题，但如果两个角色都要"去图书馆借同一本书"，碰撞检测不会发现。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 可选方案</div>
+        <p>保持并行生成（这是对的），但在 Step 3 碰撞检测中增加"意图冲突检测"：两个角色意图高度相似且同时同地时，触发 conflict_resolution 流程。</p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 3：世界模拟 -->
+<!-- ============================================================ -->
+<h2 id="m3">Step 3：世界模拟</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod3')">
+    <span class="module-id" style="background:#e1f5ee; color:#0f6e56;">3</span>
+    <span class="module-title">detect_encounters() + generate_dialogue()<span class="module-subtitle">纯规则碰撞检测 + LLM 对话生成</span></span>
+    <span class="module-grade grade-C">C</span>
+    <span class="chevron" id="chev-mod3">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod3">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      这是系统中<b>问题最多的模块</b>。碰撞检测基于纯规则的分组 + 关系阈值判定，逻辑上简洁但过于粗糙。对话生成的上下文注入不足。更重要的是，<b>关系数值的更新缺乏机制</b>——对话结束后 trust/affection 没有自动变化。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>规则判定不调 LLM，节省成本</li>
+            <li>DIALOGUE / OBSERVATION / PASSING 三级分类有层次感</li>
+            <li>旁观者记忆写入（importance=3），非对称设计有意义</li>
+            <li>frozenset 索引关系查询表，O(1) 查找</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>关系数值只读不更新——对话无"后果"</li>
+            <li>碰撞判定只看 destination，忽略路径和原地停留</li>
+            <li>硬阈值不考虑情境（心情/事件/目标）</li>
+            <li>对话 LLM 无全局视角</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item severe">
+        <div class="issue-title">关系数值缺乏闭环更新 <span class="severity severity-high">高</span></div>
+        <p>这是整个系统<b>最严重的设计缺失</b>。碰撞检测读取 trust/affection 判断是否对话，但对话结束后没有任何代码更新这两个值。A 和 B 进行了一场激烈争吵或温馨对话——但 trust 和 affection 数值纹丝不动。这意味着<b>关系矩阵是一个几乎静态的数据结构</b>，只在 init 时设置，永远不会演变。这与"关系驱动的群像剧"定位严重矛盾。</p>
+        <p>查看 <span class="keyword">story_engine.py</span> 的 Step 4（状态更新），只更新了 role state（mood/condition/location/memory），没有调用 <span class="keyword">relationship.update_relationship()</span> 来更新信任和好感。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 综合方案（推荐） — 参考 workflow-audit-v2 N4 思路</div>
+        <p><b>核心思路：</b>关系系统需要三个更新入口，而非仅依赖对话。</p>
+        
+        <p><b>入口 1 — 对话驱动更新（主要）：</b></p>
+        <p>在 <span class="keyword">generate_dialogue()</span> 的 prompt 中增加输出字段 <code>"relationship_delta": {"trust": ±N, "affection": ±N}</code>（范围 -10~+10）。LLM 根据对话双方的言论、态度、结果判断关系变化。在 Step 4（状态更新）中调用 <span class="keyword">relationship.update_relationship()</span> 应用这些变化量。</p>
+
+        <p><b>入口 2 — 旁观驱动更新（次要）：</b></p>
+        <p>OBSERVATION 碰撞也产生微量关系变化：旁观者对对话参与者产生 ±1 trust 偏移（"看到 A 对 B 很温柔 → 对 A 好感+1"）。</p>
+
+        <p><b>入口 3 — 反思驱动更新（深层）：</b></p>
+        <p>在反思 prompt 中增加可选输出字段：<code>"reevaluated_relationships": {"角色名": {"trust_delta": ±N, "reason": "..."}}</code>。反思时角色可能重新评估与他人的关系（"仔细想想，A 其实一直在帮我"）。</p>
+
+        <p style="margin-top:8px;"><b>代码实现要点：</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # world_sim.py — generate_dialogue prompt 增加输出字段<br>
+        "relationship_delta": {"trust": -3, "affection": -5}  // 双方关系变化<br>
+        <br>
+        # story_engine.py — Step 4 中应用<br>
+        delta = encounter.get("relationship_delta", {})<br>
+        if delta:<br>
+        &nbsp;&nbsp;self.relationship.update_relationship(<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;cid_a, cid_b, <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;trust_delta=delta.get("trust", 0),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;affection_delta=delta.get("affection", 0)<br>
+        &nbsp;&nbsp;)<br>
+        <br>
+        # 同一角色参与多段对话时，累积应用所有 delta<br>
+        # 每个角色对 (A,B) 的关系变化独立追踪
+        </p>
+
+        <p style="margin-top:8px;"><b>参考：</b>workflow-audit-v2 指出对话异常被 asyncio.gather 静默吞没可能导致 dialogue 字段为 None，修复后确保 delta 始终可用。workflow-audit 跨模块问题 1 也强调了关系静态是系统最根本的逻辑缺陷。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">碰撞判定仅考虑硬阈值，忽略情境 <span class="severity severity-mid">中</span></div>
+        <p>当前逻辑：trust > 70 → 必定对话；trust < 30 → 也必定对话（争吵）。但角色 A 当前心情"愤怒"且 intent 是"去屋顶独处"——此时即使 trust=80 的好友来搭话，A 也可能拒绝对话。情境对碰撞类型的影响被完全忽略。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>核心思路：</b>在 <span class="keyword">_judge_encounter_type()</span> 中增加一个"情境修正系数"层，将信任/好感阈值乘以动态修正因子，而非直接硬比较。</p>
+        
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # world_sim.py — 增强 _judge_encounter_type()<br>
+        def _judge_encounter_type(rel_a, intent_a, intent_b, mood_a, mood_b):<br>
+        &nbsp;&nbsp;# Step 1: 基础阈值判定（保持现有逻辑）<br>
+        &nbsp;&nbsp;base_type = _base_threshold_judge(rel_a.trust)<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# Step 2: 情境修正因子（-0.3 ~ +0.3）<br>
+        &nbsp;&nbsp;modifier = 0.0<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 因子 1: 情绪修正<br>
+        &nbsp;&nbsp;NEGATIVE_MOODS = {"愤怒", "沮丧", "焦虑", "悲伤", "烦躁"}<br>
+        &nbsp;&nbsp;if mood_a in NEGATIVE_MOODS or mood_b in NEGATIVE_MOODS:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;modifier -= 0.2  # 负面情绪 → 少说话<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 因子 2: 意图紧急性修正<br>
+        &nbsp;&nbsp;URGENT_INTENTS = {"赶去", "追", "紧急", "迟到", "逃"}<br>
+        &nbsp;&nbsp;if any(kw in (intent_a + intent_b) for kw in URGENT_INTENTS):<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;modifier -= 0.15  # 有急事 → 更少互动<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 因子 3: 双方都空闲 → 更容易对话<br>
+        &nbsp;&nbsp;if _is_idle(intent_a) and _is_idle(intent_b):<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;modifier += 0.15<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# Step 3: 修正后的阈值<br>
+        &nbsp;&nbsp;dialogue_threshold = 70 * (1 + modifier)  # 修正后 49~91<br>
+        &nbsp;&nbsp;conflict_threshold = 30 * (1 - modifier)  # 反向修正<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# Step 4: 最终判定<br>
+        &nbsp;&nbsp;if rel_a.trust > dialogue_threshold:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return "DIALOGUE"<br>
+        &nbsp;&nbsp;elif rel_a.trust < conflict_threshold and rel_a.affection < 30:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return "DIALOGUE"  # 冲突<br>
+        &nbsp;&nbsp;elif abs(rel_a.trust - 50) < 15:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return "OBSERVATION"<br>
+        &nbsp;&nbsp;else:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return "PASSING"<br>
+        <br>
+        # 效果示例：<br>
+        # A(信任80, 心情=愤怒, 意图=去天台独处) × B(信任75, 心情=平静)<br>
+        # → modifier = -0.2(愤怒) - 0.15(独处) = -0.35<br>
+        # → dialogue_threshold = 70 × 0.65 = 45.5<br>
+        # → trust=80 > 45.5 → 仍会对话（好朋友可能安慰）<br>
+        # 但如果 trust=55 → 55 < 45.5 → OBSERVATION（只看一眼）
+        </p>
+
+        <p style="margin-top:8px;"><b>改动范围：</b>仅 world_sim.py 中一个函数。无需 LLM 调用，纯规则计算，性能无影响。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">碰撞检测只按 destination 分组 <span class="severity severity-mid">中</span></div>
+        <p>两个角色当前都在"教室"但都没有移动意图 → destination 为空 → 回退到 current_location → 分组在一起。但如果一个在教室另一个在走廊，而走廊角色正前往教室——他们不会在同一组。这意味着"移动中相遇"的场景无法被检测到。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        <p><b>核心思路：</b>将分组逻辑从"仅按 destination"扩展为"三路径交叉分组"。</p>
+        
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # world_sim.py — _group_by_proximity() 替代简单 destination 分组<br>
+        def _group_by_proximity(char_intents, char_states):<br>
+        &nbsp;&nbsp;groups = []  # 每组是一个 set of (cid, location)<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;for cid, intent in char_intents.items():<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;state = char_states[cid]<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;dest = intent.get("destination") or state.current_location<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;curr = state.current_location<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;# 该角色可以出现在两个位置：当前 + 目标<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;positions = {curr, dest}  # 去重<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;# 查找已有组<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;merged = False<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;for group in groups:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 检查该角色的任何位置是否与组内任何位置重叠<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;group_locs = {loc for _, loc in group}<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if positions &amp; group_locs:  # 交集非空 → 相遇<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 取交集位置作为遇地点（优先选 dest 如果都在组内）<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;meet_loc = (positions &amp; group_locs).pop()<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;group.add((cid, meet_loc))<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;merged = True<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;break<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;if not merged:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;groups.append({(cid, dest)})  # 新组，以目的地为准<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;return groups<br>
+        <br>
+        # 效果：角色A在教室→去走廊，角色B在走廊→去教室<br>
+        # A: {教室, 走廊}  B: {走廊, 教室} → 交集={教室, 走廊}<br>
+        # → 两人在走廊相遇（优先取非自己当前位置的地点）
+        </p>
+
+        <p style="margin-top:8px;"><b>补充：</b>同时保留"原地角色"的分组——即使角色没有移动意图（destination=current_location），也应纳入碰撞检测。一个坐在教室里自习的角色仍然可能与进入教室的人对话。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">对话 LLM 缺少全局上下文 <span class="severity severity-mid">中</span></div>
+        <p>对话 prompt 只传入双方 character profile + intent + 关系文本。世界事件、故事进展、其他角色动态（"刚才班长在门口看了一眼"）全部缺失。对话内容容易与大局脱节。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 综合方案 — 参考 workflow-audit-v2 N6 + audit P1-2</div>
+        <p><b>方案 A（立即修复）：在对话 prompt 中注入全局上下文</b></p>
+        <p>在对话 prompt 中注入当前活跃世界事件摘要 + 双方最近的 3 条记忆片段 + 故事进展摘要。让对话能反映更大的故事脉络。</p>
+
+        <p style="margin-top:8px;"><b>方案 B（立即修复，audit-v2 N6）：所有 prompt 追加 user message trigger</b></p>
+        <p>workflow-audit-v2 N6 发现一个跨模块问题：<span class="keyword">prompts/dialogue.py</span>、<span class="keyword">character_action.py</span>、<span class="keyword">reflection.py</span>、<span class="keyword">narrative.py</span> 等所有 prompt 构建函数<b>仅返回 system role 消息</b>，没有 user message。DeepSeek 在纯 system message 下 JSON 遵守率较低，可能输出纯文本而非 JSON。</p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # 所有 prompt 构建函数统一改为：<br>
+        return [<br>
+        &nbsp;&nbsp;{"role": "system", "content": system_prompt},<br>
+        &nbsp;&nbsp;{"role": "user", "content": "请按照要求输出 JSON。"}<br>
+        ]
+        </p>
+        <p>同时修改 character_action.py、reflection.py、world_sim.py、auto_event.py、world_event_judge.py 中所有仅含 system message 的 prompt。这是一个统一的跨模块修复。</p>
+
+        <p style="margin-top:8px;"><b>方案 C（中期，audit P1-2）：对话前注入"角色初始状态快照"</b></p>
+        <p>在所有对话 LLM 调用之前，先生成一个"角色初始状态快照"：每个角色的当前心情、最近记忆、意图摘要。将状态快照注入每个对话 prompt，确保所有对话从同一基线出发。如果同一角色参与多段对话，按顺序更新情绪描述。</p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 A：弧追踪 + 叙事节奏 -->
+<!-- ============================================================ -->
+<h2 id="ma">弧追踪 + 叙事节奏判定</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modA')">
+    <span class="module-id" style="background:#faece7; color:#993c1d;">A</span>
+    <span class="module-title">Arc State Machine<span class="module-subtitle">normal → cooldown → check → normal</span></span>
+    <span class="module-grade grade-A">A</span>
+    <span class="chevron" id="chev-modA">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modA">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      这是系统中最精巧的设计之一。状态机处理了"高压事件之后需要余韵/调节期"的叙事节奏问题，三种回退路径（full/light/foreshadow）提供了灵活的处理方式。整体逻辑自洽。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>三状态 + 三路径设计有层次感</li>
+            <li>cooldown 锁定重入防止连击</li>
+            <li>normal 模式下的快进机制减少冗余叙事</li>
+            <li>MAX_SKIPPED_STEPS=5 防止连续快进过久</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>弧状态全局共享，一个角色的高压事件影响所有叙事</li>
+            <li>伏笔机制：从 intent 中提取 internal_thought 作为伏笔</li>
+            <li>伏笔过期直接丢弃，不留痕迹</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">全局弧状态：一人高压，全员受影响 <span class="severity severity-mid">中</span></div>
+        <p>当角色A经历 importance=8 的事件触发 cooldown，整个叙事进入 cooldown 模式。此时角色B在做日常琐事——也会获得完整叙事。这导致叙事节奏被高 importance 角色"绑架"。更合理的做法是弧追踪按角色独立。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 综合方案 — 参考 workflow-audit-v2 N1</div>
+        <p><b>方案 A（轻量，推荐先做）：修复 arc_state 快照不一致</b></p>
+        <p>workflow-audit-v2 N1 发现了 <span class="keyword">advance_one_step()</span> 中的一个代码级隐患：line 379 用 <code>arc_state = self.state.arc_state</code> 捕获快照，但 lines 380-395 可能变更 <code>self.state.arc_state</code>。之后的叙事模式判定（lines 400-429）混用了局部快照和当前状态，形成"时间旅行式不一致"。</p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # 修复：统一使用 self.state.arc_state<br>
+        entered_arc = self.state.arc_state  # 仅用于日志<br>
+        <br>
+        if self.state.arc_state == "cooldown":<br>
+        &nbsp;&nbsp;self.state.arc_cooldown_remaining -= 1<br>
+        &nbsp;&nbsp;if self.state.arc_cooldown_remaining &lt;= 0:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;self.state.arc_state = "check"<br>
+        elif self.state.arc_state == "normal" and max_importance &gt;= ARC_HIGH_IMPORTANCE:<br>
+        &nbsp;&nbsp;self.state.arc_state = "cooldown"<br>
+        <br>
+        # 叙事判定全部用 self.state.arc_state（当前值）<br>
+        if self.state.arc_state == "cooldown":<br>
+        &nbsp;&nbsp;narrative_mode = "full"<br>
+        elif self.state.arc_state == "check": ...<br>
+        elif self.state.arc_state == "normal": ...
+        </p>
+
+        <p style="margin-top:8px;"><b>方案 B（中期）：改为 per-character arc_state</b></p>
+        <p>全局 arc_state 的一个角色高压事件影响所有叙事。改为每个角色维护独立 arc_state，叙事时按角色聚焦：如果 A 在 cooldown → 叙事聚焦 A 的故事线；B 在 normal → B 的日常活动可快进。这更接近 Stanford Generative Agents 的 per-agent 设计哲学。</p>
+
+        <p style="margin-top:8px;"><b>参考：</b>audit-v2 N1 提供了完整的代码改写方案，改动仅 3-5 行，建议立即修复。</p>
+      </div>
+
+      <div class="issue-item severe">
+        <div class="issue-title">伏笔机制的根本性缺陷 <span class="severity severity-high">高</span></div>
+        <p>Type B（伏笔留白）的执行逻辑是：在 check → normal 的低 importance 条件下，<b>随机取出角色的 internal_thought 存入 foreshadow_buffer</b>。然后在正常叙事时消费 buffer 中的内容注入 prompt。</p>
+        <p>问题在于：</p>
+        <ul style="margin:4px 0 0 16px; font-size:12px;">
+          <li>internal_thought 是角色意图生成时的内心独白（如"今天午饭吃什么"），<b>不是伏笔</b></li>
+          <li>buffer 的消费是 FIFO（取前5条），与当前叙事场景无关联</li>
+          <li>过期伏笔直接写入记忆作为"[过期伏笔]"，对角色无实际影响</li>
+        </ul>
+        <p>整个伏笔机制更像是"内心独白的延迟消费"，而非传统叙事意义上的伏笔（设置悬念 → 后续揭示）。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 综合方案 — 参考 workflow-audit-v2 N3</div>
+        
+        <p><b>方案 A（立即修复，1行改动）：伏笔消费改为按 recency 倒序</b></p>
+        <p>workflow-audit-v2 N3 发现当前伏笔消费是 FIFO（取 buffer[:5]），导致最老的伏笔先被注入。如果 Step 8 产生的伏笔"走廊跟踪"比 Step 15 产生的"食堂菜单"更早入队，在 Step 18 食堂场景中，先注入的却是"走廊跟踪"——语境错位。</p>
+        <p>改为按 <span class="keyword">created_step</span> 倒序消费：</p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py Line 569 改为：<br>
+        take = sorted(self.state.foreshadow_buffer, <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;key=lambda e: -e["created_step"])[:5]<br>
+        # 消费最新的 5 条，而非最老的 5 条
+        </p>
+        <p>好处：最新伏笔更可能与当前叙事语境相关，改动仅 1 行。</p>
+
+        <p style="margin-top:8px;"><b>方案 B（中期重构）：由叙事 LLM 主动埋设伏笔</b></p>
+        <p>伏笔不应从 <span class="keyword">internal_thought</span>（内心独白）提取，而应由叙事 LLM 在每次叙事时输出 <code>"foreshadowing": "..." </code>字段——这是真正的"叙事性伏笔"（悬念、暗示、未完成的对话等）。在下次叙事 prompt 中注入这些未消费的伏笔。这与 workflow-audit P1-4 的伏笔过期机制（created_step + 8步过期）配合使用。</p>
+
+        <p style="margin-top:8px;"><b>参考：</b>audit-v2 N3 详细分析了 FIFO 导致的语境错位问题，方案 A 是成本最低的立即改进。方案 B 需要改动叙事 prompt，工作量更大但效果更好。</p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 4：状态更新 + 记忆 -->
+<!-- ============================================================ -->
+<h2 id="m4">Step 4：状态更新 + 记忆写入</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod4')">
+    <span class="module-id" style="background:#e6f1fb; color:#185fa5;">4</span>
+    <span class="module-title">update_character_after_action() + add_memory()<span class="module-subtitle">纯规则：状态变更 + 记忆持久化</span></span>
+    <span class="module-grade grade-A">A</span>
+    <span class="chevron" id="chev-mod4">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod4">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      状态更新逻辑简洁可靠，记忆加权淘汰算法合理。基本没有问题，只是移动轨迹清空有轻微遗憾。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>加权记忆淘汰（importance×10 + step×0.5 + reflection_bonus 30）而非二元优先，避免低重要性反思挤掉高重要性普通记忆</li>
+            <li>记忆检索三因子（近期×1.5 + 重要性 + 关键词匹配），设计合理</li>
+            <li>recent_actions 保留最近 3 条，兼顾上下文和 prompt 长度</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>movement_path 每步清空，角色无"方位感"</li>
+            <li>记忆描述拼接较粗糙（intent + thought + 对话摘录）</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">movement_path 每步清空 <span class="severity severity-low">低</span></div>
+        <p>角色在 Step 4 末尾清空 movement_path。这合理——movement_path 只用于当前步内的轨迹记录。但如果某角色在一步内经过了多个位置（A→B→C），虽然 movement_path 记录了 [B,C]，但外部没有消费这个信息。</p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 5：叙事编排 -->
+<!-- ============================================================ -->
+<h2 id="m5">叙事编排</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod5')">
+    <span class="module-id" style="background:#eeedfe; color:#534ab7;">5</span>
+    <span class="module-title">_generate_narrative_with_foreshadowing()<span class="module-subtitle">LLM 统一调用：按场景分组 → 连贯叙事</span></span>
+    <span class="module-grade grade-B">B</span>
+    <span class="chevron" id="chev-mod5">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod5">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      P1-5 修复后的统一单次 LLM 调用方案是正确的改进方向。story_summary 提供长期上下文，角色卡防止混淆，按场景分组 + 时间线指导提供结构。仍有一些细节问题。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>统一单次调用保证场景间过渡和因果链</li>
+            <li>角色卡（name/gender/role/personality/background/speaking_style）防混淆</li>
+            <li>story_summary 提供最多 50 步的全量上下文</li>
+            <li>narrative_style 从玩家设定读入，不硬编码</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>light_mode 参数传递后未见差异化处理</li>
+            <li>story_summary 压缩（每条截200字）可能截断关键信息</li>
+            <li>统一调用时的 context 总量较大</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">light_mode 未被实际使用 <span class="severity severity-mid">中</span></div>
+        <p><span class="keyword">_generate_narrative_with_foreshadowing()</span> 接收 <code>light_mode: bool = False</code> 参数，并传递给 prompt 构建函数。但查看 prompt 模板，没有看到对 light_mode 的差异化处理（如"轻量模式：只写 150-300 字简略概述"）。这意味着 Type A 轻量叙事实际上和 full 叙事调用的是同一个 prompt，输出质量受 LLM 自行控制。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 综合方案</div>
+        <p>在 prompt 中增加 mode 相关指令，明确区分三种模式：</p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # prompts/narrative.py — 按 mode 构建差异化 system prompt<br>
+        if light_mode:<br>
+        &nbsp;&nbsp;mode_instruction = "轻量模式：请用 150-300 字简略概述本时间段的事件，<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;不需要详细描写对话和内心活动。保持叙事流畅但简洁。"<br>
+        elif mode == "foreshadow":<br>
+        &nbsp;&nbsp;mode_instruction = "伏笔模式：请用 200-400 字叙事，<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;在叙事中埋设至少一处伏笔（未完成的对话/暗示/悬念）。"<br>
+        else:  # full<br>
+        &nbsp;&nbsp;mode_instruction = "完整模式：请用 400-700 字完整叙事，<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;包含对话、内心活动、环境描写和场景过渡。"<br>
+        system_prompt = system_prompt + "\n\n" + mode_instruction
+        </p>
+        <p>同时确保 prompt 包含 user message trigger（参考 audit-v2 N6），提高 JSON 输出遵守率。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">story_summary 的压缩可能丢失信息 <span class="severity severity-low">低</span></div>
+        <p>每条叙事截 200 字，最多 50 条。早期重要事件可能被截断后失去关键细节（如某人说了某句话）。这是 LLM 上下文窗口的必然取舍，但可以考虑做更智能的摘要：对早期叙事不截断而是用 LLM 做摘要压缩。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>方案：分层摘要 — 近期完整 + 远期 LLM 压缩</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — _build_story_summary() 增强<br>
+        def _build_story_summary(self):<br>
+        &nbsp;&nbsp;all_narratives = self.state.timeline  # 所有叙事步<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# Layer 1: 最近 20 步 — 保持完整（每条 200 字截断）<br>
+        &nbsp;&nbsp;recent = all_narratives[-20:]<br>
+        &nbsp;&nbsp;recent_text = "\n".join(n[:200] for n in recent)<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# Layer 2: 20-50 步前的 — LLM 压缩为精炼摘要<br>
+        &nbsp;&nbsp;older = all_narratives[:-20][-30:]  # 最多取 30 条压缩<br>
+        &nbsp;&nbsp;if older and not self._cached_summary:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;compressed = await self._compress_narratives(older)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;self._cached_summary = compressed  # 缓存，避免重复调用<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# Layer 3: 50 步之前的 — 使用已缓存的超压缩版本<br>
+        &nbsp;&nbsp;ancient = self._cached_summary or ""<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;return f"## 近期发展\n{recent_text}\n\n## 前期概要\n{ancient}"<br>
+        <br>
+        # 压缩函数 — 一次轻量 LLM 调用<br>
+        async def _compress_narratives(self, narratives):<br>
+        &nbsp;&nbsp;prompt = """将以下故事发展压缩为 500-800 字的精炼摘要，<br>
+        &nbsp;&nbsp;保留关键情节节点、角色关系变化和重要事件。<br>
+        &nbsp;&nbsp;请用叙事性语言而非提纲。"<br>
+        &nbsp;&nbsp;{narratives}"""<br>
+        &nbsp;&nbsp;response = await llm_client.chat_async(prompt, max_tokens=500)<br>
+        &nbsp;&nbsp;return response
+        </p>
+
+        <p style="margin-top:8px;"><b>压缩触发时机：</b>每新产生 10 条叙事时（而非每步），重新压缩一次。这样 10 步才消耗 1 次额外 LLM 调用，成本可控。</p>
+        <p><b>缓存失效：</b>当故事存档/恢复时清除缓存，确保不同会话不共用压缩结果。</p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 R：反思 -->
+<!-- ============================================================ -->
+<h2 id="mr">反思机制</h2>
+
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modR')">
+    <span class="module-id" style="background:#f1efe8; color:#444441;">R</span>
+    <span class="module-title">_run_reflections()<span class="module-subtitle">每3叙事步触发：高层洞察 + 目标/计划更新</span></span>
+    <span class="module-grade grade-B">B</span>
+    <span class="chevron" id="chev-modR">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modR">
+
+    <div class="analysis-section">
+      <div class="analysis-label">逻辑评估</div>
+      <p style="font-size:13px; margin-bottom:12px;">
+      反思机制基于叙事步触发（P2-12 修复），取最近 6 步非反思记忆，生成洞察并更新 long_term_goal / daily_plan。整体合理。存在跨反思信息隔离的问题。
+      </p>
+
+      <div class="pro-con-grid">
+        <div class="pro-box">
+          <div class="box-label">✅ 合理之处</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>基于叙事步触发确保反思始终基于实际故事进展</li>
+            <li>反思记忆 importance floor=7 + is_reflection 标记，检索时有加成</li>
+            <li>可更新 long_term_goal 和 daily_plan，影响后续行为</li>
+          </ul>
+        </div>
+        <div class="con-box">
+          <div class="box-label">⚠️ 潜在问题</div>
+          <ul style="margin:4px 0 0 16px; font-size:12px;">
+            <li>反思只看最近6步非反思记忆，忽略更早的上下文</li>
+            <li>更新后的 goal/plan 在 prompt 中只是普通文本，LLM 可能忽略</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">反思缺乏长期记忆的连接 <span class="severity severity-mid">中</span></div>
+        <p>反思只基于最近6步的记忆，但"反思"这个行为本质上需要联系更久远的经历。角色在第 50 步反思时，只看第 44-50 步的记忆，看不到第 10 步发生过的重要事件。这限制了反思的深度。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>方案：双窗口记忆检索 — 近期窗口 + 远期采样</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # story_engine.py — _run_reflections() 中的记忆检索<br>
+        def _get_reflection_memories(self, cid, current_sim_step):<br>
+        &nbsp;&nbsp;all_memories = self.state.character_memories[cid]<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 近期窗口：最近 6 步的非反思记忆<br>
+        &nbsp;&nbsp;recent_cutoff = current_sim_step - 6<br>
+        &nbsp;&nbsp;recent = [m for m in all_memories <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if m.get("step", 0) >= recent_cutoff <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and not m.get("is_reflection")]<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 远期窗口：随机采样 2 条高 importance 旧记忆（step < recent_cutoff）<br>
+        &nbsp;&nbsp;distant = [m for m in all_memories <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if m.get("step", 0) < recent_cutoff <br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and not m.get("is_reflection")<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;and m.get("importance", 0) >= 5]  # 只取重要的旧记忆<br>
+        &nbsp;&nbsp;if len(distant) > 2:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;distant = random.sample(distant, 2)  # 随机 2 条<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 合并：近期在前（权重更高），远期在后（提供深度）<br>
+        &nbsp;&nbsp;combined = recent + distant<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;# 在 prompt 中区分展示<br>
+        &nbsp;&nbsp;context = "## 近期经历（最近几步）\n" + format(recent)<br>
+        &nbsp;&nbsp;context += "\n## 回顾过往\n" + format(distant)<br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;return combined, context
+        </p>
+
+        <p style="margin-top:8px;"><b>效果：</b>角色在第 50 步反思时，既能看到第 44-50 步的近期"发生了什么"，也能随机回忆起第 10 步的"第一次见面"或第 25 步的"激烈争吵"——让反思真正有"回首往事"的深度。</p>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">goal/plan 更新的有效性存疑 <span class="severity severity-low">低</span></div>
+        <p>反思更新了 <code>long_term_goal</code> 和 <code>daily_plan</code>，这些通过 scratchpad 注入后续 intent 生成的 prompt。但 prompt 中这些只是普通文本——LLM 可能参考，也可能忽略。没有强约束确保角色行为真的受更新后的 goal 影响。</p>
+      </div>
+
+      <div class="alternative-box">
+        <div class="alt-label">💡 代码级方案（原创，audit-v2 未覆盖）</div>
+        
+        <p><b>方案：将 goal/plan 从"参考文本"提升为"行为约束"</b></p>
+        <p style="font-family:monospace; font-size:12px; background:#f0effc; padding:8px 12px; border-radius:6px; line-height:1.8">
+        # character_action.py — prompt 中 goal/plan 的呈现方式<br>
+        # 从"参考文本"（现在）→ "行为约束"（改进后）<br>
+        <br>
+        # 现在的 prompt：<br>
+        # "## 你的长期目标\n{long_term_goal}"  ← LLM 可能忽略<br>
+        <br>
+        # 改进后的 prompt：<br>
+        # "## ⚠️ 你的首要目标（你的所有行动都应该服务于这个目标）<br>
+        #  {long_term_goal}<br>
+        #  请在生成意图时回答：你的下一步行动如何推动了上述目标？<br>
+        #  输出字段 goal_alignment: 一句话说明"</span><br>
+        <br>
+        # 在 Intent Pydantic 模型中增加字段：<br>
+        # goal_alignment: str = ""  # LLM 必须输出<br>
+        <br>
+        # 如果 LLM 输出的 intent 与 goal 明显矛盾（基于关键词判断），<br>
+        # 增加一个轻量规则校验层：<br>
+        def _check_goal_consistency(intent, goal):<br>
+        &nbsp;&nbsp;if not goal or goal == "无":<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return True  # 无目标时不检查<br>
+        &nbsp;&nbsp;goal_keywords = _extract_keywords(goal)<br>
+        &nbsp;&nbsp;intent_keywords = _extract_keywords(intent.destination + intent.intent)<br>
+        &nbsp;&nbsp;overlap = goal_keywords &amp; intent_keywords<br>
+        &nbsp;&nbsp;if not overlap:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;logger.debug(f"目标-意图偏离: goal={goal[:30]}..., intent={intent.intent[:30]}...")<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;return False  # 偏离但允许，仅记录<br>
+        &nbsp;&nbsp;return True
+        </p>
+
+        <p style="margin-top:8px;"><b>注意：</b>不强制拦截偏离（角色可以有"偏离目标"的自由意志），但增加 <code>goal_alignment</code> 字段让 LLM 主动自省。这保留了叙事自由度，同时提高了目标对行为的影响概率。</p>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 跨模块问题 -->
+<!-- ============================================================ -->
+<h2 id="cross">跨模块结构性问题</h2>
+
+<div class="flaw-card">
+  <h4>🔴 问题1：关系系统完全静态</h4>
+  <p>这是整个系统最根本的逻辑缺陷。关系矩阵在 init 时初始化（LLM 生成初始值），之后 trust/affection 数值<b>永远不会变化</b>。对话不更新关系，事件不更新关系，反思不更新关系。碰撞检测读取关系值来决定对话类型——但这些值是不变的，导致角色间的关系永远停留在初始状态。</p>
+  <p><b>影响：</b>"关系驱动叙事"的核心承诺无法兑现。A 和 B 经历了 50 步的故事后，关系数值仍然是初始值。碰撞判定看似动态实则静态。</p>
+  <p><b>解决方向（详见 Step 3 综合方案 + workflow-audit-v2 N4 思路）：</b></p>
+  <ul style="margin:4px 0 0 16px; font-size:13px;">
+    <li><b>对话 LLM 输出 relationship_delta</b>：在 generate_dialogue prompt 中增加 <code>{"trust": ±N, "affection": ±N}</code> 输出，Step 4 中调用 relationship.update_relationship() 应用</li>
+    <li><b>OBSERVATION 碰撞产生微量关系变化</b>：旁观者对对话参与者产生 ±1 trust 偏移</li>
+    <li><b>反思触发关系重新评估</b>：反思 prompt 输出 reevaluated_relationships 字段</li>
+    <li><b>世界事件自动调整受影响角色的关系</b>：在 _judge_event_impact 中增加关系影响输出</li>
+    <li><b>⚠️ 前置依赖：</b>修复 audit-v2 N4 对话异常静默吞没问题，确保 dialogue 字段始终可用</li>
+  </ul>
+</div>
+
+<div class="flaw-card">
+  <h4>🟡 问题2：LLM 输出不确定性与下游逻辑的脆弱耦合</h4>
+  <p>系统依赖 LLM 返回结构化 JSON，但 LLM 偶尔会返回不符合预期的值（null、错误的 location 名称、不合理的时间偏移）。虽然有 null 防御和 anti-reverse 校验，但这些都是"底线防御"而非"主动保证"。</p>
+  <p>具体脆弱点与对应方案：</p>
+  <ul style="margin:4px 0 0 16px; font-size:13px;">
+    <li><b>destination 名称不规范</b>：LLM 可能返回非标准名称 → 使用标准化地点列表约束 prompt 输出（audit P0-4 方案 A）</li>
+    <li><b>next_event 无上限校验</b>：LLM 可能返回 72 小时后 → 增加最大偏移限制 +8h（本报告 Step 2 方案）</li>
+    <li><b>mood 无标准化</b>：LLM 可能返回非标准表达 → 在 prompt 中约束为预设情绪列表</li>
+    <li><b>JSON 格式遵守率不稳定</b>：所有 prompt 仅含 system role → 追加 user message trigger（audit-v2 N6，改动覆盖 6 个 prompt 模块）</li>
+    <li><b>并发调用无控制</b>：22 个并行 LLM 调用可能触发限流 → 引入 asyncio.Semaphore(6)（audit-v2 N8）</li>
+    <li><b>importance 评分不一致</b>：跨步缺乏一致性 → 在 prompt 中给出评分锚点参考</li>
+  </ul>
+</div>
+
+<div class="flaw-card">
+  <h4>🟡 问题3：角色意图与叙事之间的割裂</h4>
+  <p>Step 2 生成 intent（"去图书馆借书"），Step 3 生成对话（"在图书馆遇到了XX"），Step 5 生成叙事。但<b>叙事 LLM 可能会重新解释或改写角色行为</b>——它看到的是一份 interaction 记录，而非原始 intent。</p>
+  <p>例如：角色A的 intent 是"独自去天台冷静一下"，importance=6。叙事 LLM 看到这个 interaction 后可能写成"A 落寞地走向天台"——但也可能写成"A 气冲冲地去天台找谁算账"。叙事 LLM 有创作自由度，但这种自由度可能导致角色行为被扭曲。</p>
+  <p><b>风险：</b>如果意图和叙事之间有冲突，下一步的 memory 存储的是叙事内容（而非原始意图），角色记忆可能被"污染"。</p>
+  <p><b>解决方向：</b></p>
+  <ul style="margin:4px 0 0 16px; font-size:13px;">
+    <li>在叙事 prompt 中将 intent 作为"行为约束"注入：<code>"以下角色的行为意图是确定的，请勿在叙事中偏离其核心行动"</code></li>
+    <li>叙事输出增加 <code>intent_fidelity</code> 自评字段（LLM 评估叙事是否偏离了意图）</li>
+    <li>audit P1-1 的统一单次叙事调用方案也有助于此：LLM 看到全局时间线后更不容易偏离单个角色的行为</li>
+  </ul>
+</div>
+
+<div class="flaw-card">
+  <h4>🟢 问题4：物理体感缺失</h4>
+  <p>系统没有"饥饿/疲劳/时间流逝"的物理体感机制。角色可以永远不吃饭、不睡觉（虽然日程可能安排这些）。physical_condition 字段由 LLM 通过 condition_change 自行管理，没有系统级的强制衰减。这意味着角色的身体状态完全依赖 LLM 的"自觉"，缺少系统兜底。</p>
+  <p><b>问题不大但值得注意：</b>在长时间运行后，physical_condition 可能偏离合理范围（如连续 50 步都是"精力充沛"）。</p>
+  <p><b>解决方向：</b></p>
+  <ul style="margin:4px 0 0 16px; font-size:13px;">
+    <li>每步自动对 physical_condition 做轻微衰减（如每 10 步将"精力充沛"降级为"略有疲惫"）</li>
+    <li>当角色 schedule 中包含"用餐"类型事件时，自动恢复身体状态</li>
+    <li>将 physical_condition 与重要性联动：疲惫时 importance 评分自动降低</li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<!-- 总结 -->
+<!-- ============================================================ -->
+<h2 id="summary">总结与改进优先级</h2>
+
+<table class="summary-table">
+  <tr>
+    <th style="width:5%;">优先级</th>
+    <th style="width:22%;">问题</th>
+    <th style="width:12%;">所在模块</th>
+    <th style="width:10%;">audit-v2 参考</th>
+    <th>改进方向</th>
+  </tr>
+  <tr>
+    <td><span class="severity severity-high">P0</span></td>
+    <td><strong>关系数值永不更新</strong></td>
+    <td>Step 3 世界模拟</td>
+    <td>N4 前置依赖</td>
+    <td>对话/事件/反思三入口自动更新 trust & affection；Step 4 中统一应用（详见 Step 3 综合方案）</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-high">P0</span></td>
+    <td><strong>affected_characters 判定结果未使用</strong></td>
+    <td>Node E 世界事件</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>将 affected_characters 传递到 Step 2 做差异化 prompt；受影响角色 vs 旁观角色的提示不同（详见 Module E 代码级方案）</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-high">P0</span></td>
+    <td><strong>记忆检索缺少查询关键词</strong></td>
+    <td>Step 2 角色意图</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>从当前情境（location/event/mood/close_contacts）自动提取关键词传入 retrieve_memories()；含完整 _extract_query_keywords() 实现</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-high">P1</span></td>
+    <td><strong>伏笔机制设计缺陷</strong></td>
+    <td>Node A 弧追踪</td>
+    <td><span class="severity severity-mid">N3</span></td>
+    <td>方案A（立即）：FIFO→recency 倒序消费（1行改动）；方案B（中期）：叙事 LLM 主动埋设伏笔</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-high">P1</span></td>
+    <td><strong>全局弧状态影响无关角色</strong></td>
+    <td>Node A 弧追踪</td>
+    <td><span class="severity severity-high">N1</span></td>
+    <td>方案A（立即）：修复 arc_state 局部快照不一致（3-5行）；方案B（中期）：改为 per-character arc_state</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-mid">P1</span></td>
+    <td><strong>碰撞判定忽略情境修饰</strong></td>
+    <td>Step 3 世界模拟</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>加入 mood/urgency/idle 三因子修正系数（-0.3~+0.3）；含完整 _judge_encounter_type() 代码实现</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-mid">P1</span></td>
+    <td><strong>精确匹配导致相近时间点无法互动</strong></td>
+    <td>Step 1 世界时钟</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>引入 ±5 分钟时间窗口；在 _get_next_world_time() 中合并窗口内角色为活跃列表（含完整代码）</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-mid">P1</span></td>
+    <td><strong>light_mode 未实际生效</strong></td>
+    <td>叙事编排</td>
+    <td><span class="severity severity-mid">N6</span></td>
+    <td>在 prompt 中按 mode（full/light/foreshadow）构建差异化指令；追加 user message trigger 提高 JSON 遵守率</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-mid">P2</span></td>
+    <td><strong>对话 LLM 缺少全局上下文</strong></td>
+    <td>Step 3 世界模拟</td>
+    <td><span class="severity severity-mid">N6</span></td>
+    <td>注入活跃事件 + 双方近期记忆；追加 user message trigger 提高输出质量</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-mid">P2</span></td>
+    <td><strong>next_event 无上限校验</strong></td>
+    <td>Step 2 → 时间表更新</td>
+    <td><span class="severity severity-mid">N7</span></td>
+    <td>增加最大时间偏移限制（+8h）；使用总分钟数比较替代简单小时比较</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">P2</span></td>
+    <td><strong>玩家事件 importance 固定为 8</strong></td>
+    <td>Node E 世界事件</td>
+    <td><span class="severity severity-mid">N9</span></td>
+    <td>按事件类型差异化（plot=8, env=5, flavor=3）；废弃旧 add_player_event 双路径，统一走 pending 事件路径</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">P2</span></td>
+    <td><strong>非活跃角色长期无状态更新</strong></td>
+    <td>Step 1/2</td>
+    <td><span class="severity severity-high">N2</span></td>
+    <td>占用结束后自动写入"自由活动"事件（N2 方案）；引入被动状态衰减</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">P2</span></td>
+    <td><strong>auto_event 固定间隔</strong></td>
+    <td>Node E 世界事件</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>基于近 10 步 importance 移动平均动态调整间隔（6~20 步）；含完整 _should_trigger_auto_event() 实现</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-mid">P2</span></td>
+    <td><strong>跨日判断边界歧义</strong></td>
+    <td>Module S 日程初始化</td>
+    <td><span class="severity severity-mid">N7</span></td>
+    <td>使用总分钟数比较（raw_hour*60 vs base_hour*60+base_minute）替代简单 <= 判断</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">补充</span></td>
+    <td><strong>名称模糊匹配缺失</strong></td>
+    <td>Module 0 初始化</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>四层兜底：精确→去空格→编辑距离→error日志；含完整 _resolve_character_ref() 实现</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">补充</span></td>
+    <td><strong>碰撞检测只按 destination 分组</strong></td>
+    <td>Step 3 世界模拟</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>三路径交叉分组（curr+dest 双位置）；含完整 _group_by_proximity() 实现</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">补充</span></td>
+    <td><strong>群体日程缺少协调</strong></td>
+    <td>Module S 日程初始化</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>系统级 SCHOOL_SCHEDULE_TEMPLATE 共享时段 + LLM 自由时段个性化</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">补充</span></td>
+    <td><strong>反思缺乏长期记忆</strong></td>
+    <td>Module R 反思</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>双窗口检索：近期6步 + 远期随机采样2条高 importance 记忆</td>
+  </tr>
+  <tr>
+    <td><span class="severity severity-low">补充</span></td>
+    <td><strong>story_summary 压缩丢失信息</strong></td>
+    <td>叙事编排</td>
+    <td>— <span style="font-size:10px;color:#888;">(本报告原创)</span></td>
+    <td>三层摘要：近期完整(20步) + 中期LLM压缩 + 远期缓存；含 _compress_narratives() 实现</td>
+  </tr>
+</table>
+
+<p style="font-size:13px; color:#888780; margin-top:16px;">
+总结：系统的四层流水线架构和 per-agent schedule 是优秀的设计基础。当前最需要解决的三个 P0 问题是——<b>关系数值不更新、影响判定结果未使用、记忆检索缺少关键词</b>——它们直接阻碍了"关系驱动群像剧"的核心目标。
+</p>
+<p style="font-size:13px; color:#888780;">
+<b>本次更新（2026-06-01）：</b>综合 workflow-audit-v2 的代码级分析，已将 N1（arc_state 快照不一致）、N2（占用角色空窗期）、N3（伏笔 FIFO→recency）、N6（user message trigger）、N7（跨日判断总分钟数）、N8（并发控制 Semaphore）、N9（add_player_event 双路径统一）的详细方案融入各模块的"可选方案"中。方案现包含具体的代码片段、改动行数估算和实现优先级。
+</p>
+
+<!-- ============================================================ -->
+<!-- 方案比较分析（新增 2026-06-01） -->
+<!-- ============================================================ -->
+<h2 id="comparison">方案比较分析：本报告 vs workflow-audit-v2</h2>
+<p class="subtitle">对比两份文档在共同问题上的方案差异，评估最优解</p>
+
+<div class="meta-note" style="margin-bottom:16px; padding:12px 16px; background:#eeedfe; border-left:3px solid #534ab7; border-radius:8px; font-size:13px;">
+  <strong>两份报告的分工：</strong>workflow-audit-v2 是代码级审计（聚焦源码 bug 和边界情况），本报告是流程级分析（聚焦架构逻辑和设计缺陷）。两者互补多于重叠。audit-v2 发现的 N1-N9 中，只有 N3（伏笔 FIFO）和 N7（跨日判断）与本报告的问题域直接重叠；其余 N1/N2/N4/N5/N8/N9 是审计报告独有的代码级发现，本报告未覆盖。
+</div>
+
+<!-- === 重叠问题 1: 伏笔机制 === -->
+<div class="module-card">
+  <div class="module-header" onclick="toggle('cmp1')">
+    <span class="module-id" style="background:#eeedfe; color:#534ab7;">1</span>
+    <span class="module-title">伏笔机制<span class="module-subtitle">本报告 P0 vs Audit-v2 N3</span></span>
+    <span class="module-grade" style="background:#faeeda; color:#854f0b; padding:2px 10px; border-radius:8px; font-size:12px;">方案不同</span>
+    <span class="chevron" id="chev-cmp1">&#9654;</span>
+  </div>
+  <div class="module-body open" id="cmp1">
+
+    <table class="summary-table" style="margin:12px 0;">
+      <tr><th style="width:15%;">维度</th><th style="width:42%;">本报告方案</th><th style="width:42%;">Audit-v2 N3 方案</th></tr>
+      <tr>
+        <td><b>核心判断</b></td>
+        <td>问题根源在<b>伏笔的来源</b>（从 internal_thought 提取 → 不是真正的伏笔），而非消费顺序</td>
+        <td>问题在<b>消费顺序</b>（FIFO → 旧伏笔先消费，与当前场景脱节）</td>
+      </tr>
+      <tr>
+        <td><b>推荐方案</b></td>
+        <td>重构：叙事 LLM 在每次叙事时主动"埋设"伏笔（输出 foreshadowing 字段），下次叙事作为上下文注入</td>
+        <td>轻量修复：FIFO → 按 created_step 倒序消费（最新5条先出）</td>
+      </tr>
+      <tr>
+        <td><b>改动量</b></td>
+        <td>大：需修改叙事 prompt 和 foreshadow 注入流程</td>
+        <td>极小：1行改动 <code>sorted(buffer, key=lambda e: -e["created_step"])[:5]</code></td>
+      </tr>
+      <tr>
+        <td><b>覆盖范围</b></td>
+        <td>涵盖"来源"和"消费"两个层面；解决根本问题</td>
+        <td>只解决"消费顺序"；来源问题（内心独白 ≠ 伏笔）仍存在</td>
+      </tr>
+    </table>
+
+    <div class="analysis-section">
+      <div class="analysis-label">评估结论</div>
+
+      <div style="padding:14px; border-radius:8px; margin-bottom:12px; background:#e1f5ee; border-left:3px solid #0f6e56;">
+        <b>两阶段采用：先 N3 快速修复，后本报告架构重构</b>
+        <p style="margin-top:6px; font-size:13px;">
+        N3 的 recency 方案在"不改伏笔来源"的前提下确实是最佳选择——越新的内部独白越可能与当前叙事语境相关。但来源问题（internal_thought 被当作伏笔）是结构性的。我的建议：<b>先改 1 行（N3），立即缓解语境错位问题；然后在叙事 prompt 重构时从根本上改变伏笔机制（本报告方案）</b>。
+        </p>
+      </div>
+
+      <div style="font-size:13px; line-height:1.8;">
+        <b>为什么两阶段优于单独选用任一方案：</b>
+        <ul style="margin:4px 0 0 16px;">
+          <li>N3 方案 1 行改动，零风险，立即见效 → 适合当前迭代</li>
+          <li>本报告方案需要改 prompt + 数据流，改动量大 → 适合架构重构时一并做</li>
+          <li>两者不矛盾：recency 消费在过渡期可用，伏笔重构后伏笔本身已经语境相关，recency 消费反而成为合理的默认行为</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- === 重叠问题 2: 跨日判断 === -->
+<div class="module-card">
+  <div class="module-header" onclick="toggle('cmp2')">
+    <span class="module-id" style="background:#e1f5ee; color:#0f6e56;">2</span>
+    <span class="module-title">跨日判断逻辑<span class="module-subtitle">本报告 Module S vs Audit-v2 N7</span></span>
+    <span class="module-grade" style="background:#e1f5ee; color:#0f6e56; padding:2px 10px; border-radius:8px; font-size:12px;">方案一致</span>
+    <span class="chevron" id="chev-cmp2">&#9654;</span>
+  </div>
+  <div class="module-body open" id="cmp2">
+
+    <div class="analysis-section">
+      <div class="analysis-label">评估结论</div>
+
+      <table class="summary-table" style="margin:12px 0;">
+        <tr><th style="width:15%;">维度</th><th style="width:42%;">本报告方案</th><th style="width:42%;">Audit-v2 N7 方案</th></tr>
+        <tr>
+          <td><b>核心判断</b></td>
+          <td><code>actual_hour <= base_hour</code> 判断有"LLM 不遵守约束"的风险</td>
+          <td>同：跨日判断过于简单，"特殊场景可能误判"</td>
+        </tr>
+        <tr>
+          <td><b>推荐方案</b></td>
+          <td>在 prompt 中显式要求 LLM 返回 relative_hour_offset 而非绝对小时</td>
+          <td>使用总分钟数比较（target_total vs current_total）</td>
+        </tr>
+        <tr>
+          <td><b>方案层次</b></td>
+          <td>Prompt 层防御（上游）</td>
+          <td>代码层防御（下游）</td>
+        </tr>
+      </table>
+
+      <div style="padding:14px; border-radius:8px; margin-bottom:12px; background:#e1f5ee; border-left:3px solid #0f6e56;">
+        <b>互补而非竞争：两个方案可以叠加</b>
+        <p style="margin-top:6px; font-size:13px;">
+        N7 的总分钟数比较方案在代码层面更精确（不用推断 LLM 意图），优于当前简单的 <code><=</code> 判断。但我建议同时保留我的 prompt 层方案：让 LLM 理解"偏移量"比让它计算"绝对小时 + 隐含的跨日"更可靠。两者叠加 = 双重保险。
+        </p>
+        <p style="margin-top:4px; font-size:13px;"><b>实际操作顺序：</b>先实施 N7（代码层，1-2 行改动，低风险），再考虑 prompt 层优化（需测试 LLM 对"相对小时偏移"的理解度）。</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- === 重叠问题 3: 占用角色空窗 vs 非活跃角色 === -->
+<div class="module-card">
+  <div class="module-header" onclick="toggle('cmp3')">
+    <span class="module-id" style="background:#faece7; color:#993c1d;">3</span>
+    <span class="module-title">角色活动空窗<span class="module-subtitle">本报告 P2 "非活跃角色" vs Audit-v2 N2 "占用角色空窗"</span></span>
+    <span class="module-grade" style="background:#e1f5ee; color:#0f6e56; padding:2px 10px; border-radius:8px; font-size:12px;">N2 更优</span>
+    <span class="chevron" id="chev-cmp3">&#9654;</span>
+  </div>
+  <div class="module-body open" id="cmp3">
+
+    <div class="analysis-section">
+      <div class="analysis-label">评估结论</div>
+
+      <table class="summary-table" style="margin:12px 0;">
+        <tr><th style="width:15%;">维度</th><th style="width:42%;">本报告方案</th><th style="width:42%;">Audit-v2 N2 方案</th></tr>
+        <tr>
+          <td><b>问题定义</b></td>
+          <td>"非活跃角色的僵尸状态"——角色可能长时间无更新，停留在旧位置/心情</td>
+          <td>"占用角色不写 next_event → 占用结束后出现 schedule 空窗期"——更具体、更有针对性</td>
+        </tr>
+        <tr>
+          <td><b>推荐方案</b></td>
+          <td>被动状态衰减 + 自动 schedule 补充（两个独立机制）</td>
+          <td>occupancy 过期清理后自动写入"恢复自由"的 next_event</td>
+        </tr>
+        <tr>
+          <td><b>方案质量</b></td>
+          <td>General approach，覆盖范围广但不够具体</td>
+          <td>精确命中一个具体的、可复现的 bug 场景</td>
+        </tr>
+      </table>
+
+      <div style="padding:14px; border-radius:8px; margin-bottom:12px; background:#e1f5ee; border-left:3px solid #0f6e56;">
+        <b>N2 方案更好：更具体、更精准</b>
+        <p style="margin-top:6px; font-size:13px;">
+        我提出的"非活跃角色"是一个大类问题，N2 精准锁定了其中最重要的子场景。在 occupancy 清理时写入 "自由活动" 事件，比我的"被动状态衰减"更直接地解决了角色从调度系统中消失的 bug。我的被动衰减方案仍有价值但更适合作为后续补充——当角色确实在等待下一个 scheduled event 时（非占用场景），让他们的状态自然演化。
+        </p>
+        <p style="margin-top:4px; font-size:13px;"><b>结论：</b>先实施 N2 方案（核心 bug 修复），我的被动衰减作为长期可选的增强特性。</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- === 本报告独有的 P0 问题（audit-v2 完全未覆盖）=== -->
+<div class="module-card">
+  <div class="module-header" onclick="toggle('cmp4')">
+    <span class="module-id" style="background:#fbeaf0; color:#993556;">4</span>
+    <span class="module-title">本报告独有的结构性发现<span class="module-subtitle">audit-v2 完全未覆盖的 3 个 P0 + 3 个 P1 问题</span></span>
+    <span class="module-grade" style="background:#fbeaf0; color:#993556; padding:2px 10px; border-radius:8px; font-size:12px;">独特价值</span>
+    <span class="chevron" id="chev-cmp4">&#9654;</span>
+  </div>
+  <div class="module-body open" id="cmp4">
+
+    <div class="analysis-section">
+      <div class="analysis-label">评估：为什么审计报告没有发现这些问题？</div>
+
+      <div class="flaw-card" style="background:#fef4f0; border:0.5px solid #e8c96a; border-radius:10px; padding:16px; margin:12px 0;">
+        <h4 style="margin:0 0 8px; color:#993c1d;">🔴 P0 关系数值不更新 — 流程级缺陷，无法从代码审查中察觉</h4>
+        <p style="font-size:13px;">
+        审计报告逐行审查了 story_engine.py 的代码，但代码中没有显式的 bug——关系读取代码（world_sim.py）正确地从 relationships 列表中获取了 trust/affection；状态更新代码（Step 4）正确地更新了 character state。问题在于<b>没有任何代码在对话/事件后调用 relationship.update_relationship()</b>。这不是代码 bug，而是<b>数据流的缺失链路</b>。只有在理解了"关系应该驱动叙事"的设计意图后，才能真正意识到这个缺失。
+        </p>
+        <p style="font-size:13px; margin-top:8px;"><b>方案质量评估：</b>我提出的"三入口自动更新"方案（对话 LLM 输出 relationship_delta + OBSERVATION 微量变化 + 反思触发关系重评估）是合理的。方案的核心正确性来自一个原则：<b>任何改变角色间 "距离" 的行为都应该影响关系数值</b>。对话改变关系是直觉性的（争吵→降 trust），但旁观和反思改变关系则基于更微妙的模拟推理（"注意到某人帮助了他人" → 提升好感）。
+        </p>
+      </div>
+
+      <div class="flaw-card" style="background:#fff8f3; border:0.5px solid #e8c96a; border-radius:10px; padding:16px; margin:12px 0;">
+        <h4 style="margin:0 0 8px; color:#854f0b;">🔴 P0 affected_characters 未使用 — 跨模块的"数据孤岛"</h4>
+        <p style="font-size:13px;">
+        这是一个典型的跨模块中继断裂。审计报告可能注意到 <code>_judge_event_impact()</code> 返回了结果，但无法确认这个结果是否被下游使用——因为消费点（Step 2 intent 生成）在不同的文件中（story_engine.py 调用 character_action.py 的 prompt 构建，中间经过 2-3 层传递）。这不是代码审查的盲区，而是<b>数据流追踪需要理解系统设计意图</b>。
+        </p>
+        <p style="font-size:13px; margin-top:8px;"><b>方案质量评估：</b>差异化 prompt 方案（受影响角色看到 "你被波及" → 未受影响角色看到 "校园传言"）是合理且低成本的。不需要新增 LLM 调用，只需改变 prompt 构建时的数据注入路径。这个方案优于"不做任何处理"的状态，也优于"所有角色看到同一份事件描述"的当前状态。
+        </p>
+      </div>
+
+      <div class="flaw-card" style="background:#fff8f3; border:0.5px solid #e8c96a; border-radius:10px; padding:16px; margin:12px 0;">
+        <h4 style="margin:0 0 8px; color:#854f0b;">🔴 P0 记忆检索缺 query_keywords — 实现不完整</h4>
+        <p style="font-size:13px;">
+        <code>retrieve_memories()</code> 的签名支持 query_keywords 参数，但调用处从未传入。审计报告可能认为这是"功能未实现"而非 bug。但对我来说，这是流程合理性的缺陷：角色检索记忆时应该基于"当前情境"来找到相关记忆——否则只是按时间顺序取最近 N 条，失去了"记忆检索"的核心意义。
+        </p>
+        <p style="font-size:13px; margin-top:8px;"><b>方案质量评估：</b>从情境提取关键词（location + mood + close_contacts）是合理的第一步。但存在"关键词太泛"的风险（"教室"几乎匹配所有记忆）。更好的方案可能是两阶段检索：先用近期性粗筛（取 20 条），再用小型 LLM 或向量相似度做精筛（取 8 条）。这个改进可以在后续迭代中引入。
+        </p>
+      </div>
+
+      <div class="flaw-card" style="background:#fff8f3; border:0.5px solid #e8c96a; border-radius:10px; padding:16px; margin:12px 0;">
+        <h4 style="margin:0 0 8px; color:#854f0b;">🟠 P1 弧状态全局共享 — 设计层面的权衡而非 bug</h4>
+        <p style="font-size:13px;">
+        审计报告 N1 发现了弧状态实现层面的一个 bug（局部快照 vs 当前状态不一致），但没有质疑"全局共享"这个设计决策本身。我认为全局共享是一个设计权衡：它实现简单（一个状态机管所有角色），但会让平静角色被"绑架"进入 cooldown 模式。
+        </p>
+        <p style="font-size:13px; margin-top:8px;"><b>方案质量评估：</b>改为 per-character arc_state 是更合理的长远方向，但改动量较大（状态机需要复制到每个角色 + 叙事逻辑需要聚焦于高 importance 角色而非全部）。建议分两步：先修复 N1（代码 bug），再在架构迭代时做 per-character 重构。
+        </p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- === Audit-v2 独有的代码级发现 === -->
+<div class="module-card">
+  <div class="module-header" onclick="toggle('cmp5')">
+    <span class="module-id" style="background:#f1efe8; color:#444441;">5</span>
+    <span class="module-title">Audit-v2 独有的代码级发现<span class="module-subtitle">本报告未覆盖的 6 个问题</span></span>
+    <span class="module-grade" style="background:#e6f1fb; color:#185fa5; padding:2px 10px; border-radius:8px; font-size:12px;">互补价值</span>
+    <span class="chevron" id="chev-cmp5">&#9654;</span>
+  </div>
+  <div class="module-body open" id="cmp5">
+
+    <table class="summary-table" style="margin:12px 0;">
+      <tr><th>#</th><th>问题</th><th>性质</th><th>方案</th><th>方案评估</th></tr>
+      <tr>
+        <td><b>N1</b></td>
+        <td>arc_state 局部快照 vs self.state.arc_state 不一致</td>
+        <td><span class="severity severity-high">代码 bug</span></td>
+        <td>统一使用 self.state.arc_state</td>
+        <td style="background:#e1f5ee;">✅ 方案正确。3-5行，低风险。这是必须修复的 bug，不是优化。</td>
+      </tr>
+      <tr>
+        <td><b>N2</b></td>
+        <td>占用角色 schedule 空窗期</td>
+        <td><span class="severity severity-high">代码 bug</span></td>
+        <td>occupancy 过期后写入"自由活动"事件</td>
+        <td style="background:#e1f5ee;">✅ 方案正确。比我的"被动状态衰减"更精准。</td>
+      </tr>
+      <tr>
+        <td><b>N4</b></td>
+        <td>对话异常被 asyncio.gather 静默吞没</td>
+        <td><span class="severity severity-mid">错误处理</span></td>
+        <td>显式检查 gather 结果</td>
+        <td style="background:#e1f5ee;">✅ 方案正确。当前的"恰好安全"是脆弱的——任何下游代码修改都可能暴露这个隐藏问题。</td>
+      </tr>
+      <tr>
+        <td><b>N5</b></td>
+        <td>_pop_scheduled_events 遗留重复事件</td>
+        <td><span class="severity severity-mid">边缘情况</span></td>
+        <td>pop 时丢弃重复事件 + 写入前去重</td>
+        <td style="background:#e1f5ee;">✅ 方案正确。罕见但后果严重（时间原地踏步），防御性编程的意义大于等待触发。</td>
+      </tr>
+      <tr>
+        <td><b>N6</b></td>
+        <td>叙事 prompt 仅含 system role</td>
+        <td><span class="severity severity-low">LLM 交互</span></td>
+        <td>追加 user message trigger</td>
+        <td style="background:#e1f5ee;">✅ 方案正确。DeepSeek 的 system-only prompt 确实比 user-triggered prompt 的 JSON 遵守率低。低成本、零风险。</td>
+      </tr>
+      <tr>
+        <td><b>N8</b></td>
+        <td>LLM 并发无控制</td>
+        <td><span class="severity severity-low">基础设施</span></td>
+        <td>asyncio.Semaphore(6)</td>
+        <td style="background:#faeeda;">⚠️ 方案方向正确，但 Semaphore(6) 的数值需要实测调整。DeepSeek API 的并发策略可能在不同时段有差异。</td>
+      </tr>
+      <tr>
+        <td><b>N9</b></td>
+        <td>add_player_event 双路径逻辑割裂</td>
+        <td><span class="severity severity-low">代码清理</span></td>
+        <td>废弃旧路径，统一走 pending 事件</td>
+        <td style="background:#e1f5ee;">✅ 方案正确。这与我的"玩家事件 importance 差异化"建议可以叠加使用。</td>
+      </tr>
+    </table>
+
+    <div style="padding:14px; border-radius:8px; margin:12px 0; background:#e1f5ee; border-left:3px solid #0f6e56;">
+      <b>总体评价：</b>Audit-v2 的所有代码级方案都是正确的。它们不是"可以讨论的优化"，而是"应该修复的问题"。本报告和 Audit-v2 的真实价值在于：<b>流程分析找到"应该做什么"，代码审计找到"哪里没做对"。两者缺一不可。</b>
+    </div>
+
+  </div>
+</div>
+
+<!-- === 汇总：最终优先级路线图（两份报告合并） === -->
+<div class="module-card">
+  <div class="module-header" onclick="toggle('cmp6')">
+    <span class="module-id" style="background:#534ab7; color:#fff;">★</span>
+    <span class="module-title">合并优先级路线图<span class="module-subtitle">融合两份报告的最终行动建议</span></span>
+    <span class="chevron" id="chev-cmp6">&#9654;</span>
+  </div>
+  <div class="module-body open" id="cmp6">
+
+    <table class="summary-table" style="margin:12px 0;">
+      <tr><th style="width:8%;">轮次</th><th style="width:5%;">来源</th><th>事项</th><th style="width:35%;">说明</th></tr>
+
+      <tr style="background:#fef4f0;"><td><b>第1轮<br>（立即）</b></td><td>audit<br>audit<br>audit<br>本报告<br>本报告<br>本报告</td>
+        <td>N1 arc_state 快照修复<br>N2 占用角色空窗修复<br>N4 对话异常显式处理<br>P0 关系闭环（对话 Δ）<br>P0 affected_characters 消费<br>P0 记忆检索 query_keywords</td>
+        <td>3-5 行，修复逻辑隐患<br>5-10 行，修复角色消失 bug<br>3-5 行，防止静默失败<br>对话 prompt + Step 4 应用<br>Step 2 prompt 差异化<br>_extract_query_keywords()</td>
+      </tr>
+
+      <tr style="background:#fdfaee;"><td><b>第2轮<br>（尽快）</b></td><td>audit<br>audit<br>audit<br>本报告<br>本报告</td>
+        <td>N3 伏笔 recency 消费<br>N5 重复事件清理<br>N6/N7 prompt 优化<br>P1 弧状态 per-character<br>P1 碰撞情境修饰</td>
+        <td>1 行，立即见效<br>pop 时丢弃而非保留<br>user trigger + 总分钟数比较<br>方案A: 先修 N1；方案B: 后续 per-char<br>mood/urgency 修正因子</td>
+      </tr>
+
+      <tr style="background:#faf9f6;"><td><b>第3轮<br>（后续）</b></td><td>audit<br>audit<br>本报告<br>本报告</td>
+        <td>N8 并发控制 Semaphore<br>N9 双路径统一<br>伏笔机制架构重构<br>关系系统全面重构</td>
+        <td>asyncio.Semaphore(6)<br>废弃旧 add_player_event 路径<br>叙事 LLM 主动埋设伏笔<br>反思/事件/OBSERVATION 三入口</td>
+      </tr>
+    </table>
+
+    <p style="font-size:13px; color:#888780; margin-top:12px;">
+    <b>核心原则：</b>第 1 轮修复所有"不修复就没法正确运行"的问题（bug + 缺失数据流），第 2 轮改进"影响叙事质量"的设计问题，第 3 轮做"提升上限"的架构优化。每一步完成后都应该跑一轮完整模拟验证。
+    </p>
+
+  </div>
+</div>
+
+</div>
+
+<script>
+function toggle(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+// 默认全部展开
+document.querySelectorAll('.module-body').forEach(el => el.classList.add('open'));
+document.querySelectorAll('.chevron').forEach(el => el.classList.add('open'));
+</script>
+
+</body>
+</html>

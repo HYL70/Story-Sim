@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story-Sim 流程风险评估报告</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; background: #f5f3ef; color: #2c2c2a; line-height: 1.7; font-size: 14px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 4px; color: #1a1a1a; }
+.subtitle { font-size: 13px; color: #888780; margin-bottom: 8px; }
+.summary-row { display: flex; gap: 12px; margin: 16px 0 24px; flex-wrap: wrap; }
+.summary-badge {
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+  border-radius: 8px; font-size: 13px; font-weight: 500;
+}
+.badge-p0 { background: #fbeaf0; color: #993556; }
+.badge-p1 { background: #faece7; color: #993c1d; }
+.badge-p2 { background: #faeeda; color: #854f0b; }
+
+h2 { font-size: 18px; font-weight: 500; margin: 28px 0 12px; color: #2c2c2a; border-left: 3px solid #534ab7; padding-left: 12px; }
+
+.issue-card {
+  background: white; border-radius: 12px; border: 0.5px solid #d3d1c7;
+  margin: 16px 0; overflow: hidden;
+}
+.issue-header {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 16px 20px; cursor: pointer; user-select: none;
+  transition: background 0.15s;
+}
+.issue-header:hover { background: #f1efe8; }
+.severity-tag {
+  font-size: 11px; font-weight: 600; padding: 2px 10px; border-radius: 4px;
+  white-space: nowrap; flex-shrink: 0; letter-spacing: 0.5px;
+}
+.sev-p0 { background: #fbeaf0; color: #4b1528; }
+.sev-p1 { background: #faece7; color: #4a1b0c; }
+.sev-p2 { background: #faeeda; color: #412402; }
+
+.issue-title-group { flex: 1; }
+.issue-title { font-weight: 500; font-size: 15px; }
+.issue-loc { font-size: 11px; color: #888780; margin-top: 2px; }
+.issue-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
+.issue-tag { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #f1efe8; color: #5f5e5a; }
+
+.issue-body { padding: 0 20px 20px; display: none; }
+.issue-body.open { display: block; }
+
+.problem-block, .solution-block { margin: 12px 0; }
+.block-label {
+  font-size: 11px; font-weight: 600; margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.problem-block .block-label { color: #993c1d; }
+.solution-block .block-label { color: #0f6e56; }
+
+.problem-text, .solution-text {
+  padding: 12px 16px; border-radius: 8px; font-size: 13px; line-height: 1.8;
+}
+.problem-text { background: #faece7; border-left: 3px solid #993c1d; }
+.solution-text { background: #e1f5ee; border-left: 3px solid #0f6e56; }
+
+.code-inline {
+  background: #f1efe8; padding: 1px 6px; border-radius: 3px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; color: #534ab7;
+}
+.code-block {
+  background: #1a1a1a; color: #d3d1c7; border-radius: 8px; padding: 14px 18px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px;
+  line-height: 1.8; white-space: pre-wrap; margin: 4px 0;
+}
+
+.chevron { transition: transform 0.2s; font-size: 12px; color: #888780; flex-shrink: 0; }
+.chevron.open { transform: rotate(90deg); }
+
+.recommendations { margin: 24px 0; }
+.rec-item {
+  padding: 12px 16px; border-radius: 8px; margin: 8px 0;
+  background: #eeedfe; font-size: 13px;
+}
+.rec-item .rec-title { font-weight: 500; color: #3c3489; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Story-Sim 流程风险评估报告</h1>
+<p class="subtitle">深度审查：10 个节点 + 4 个跨层级问题 | 基于源码 + 工作流文档</p>
+
+<div class="summary-row">
+  <div class="summary-badge badge-p0">🔴 P0 · 架构级 4 项</div>
+  <div class="summary-badge badge-p1">🟠 P1 · 设计缺陷 5 项</div>
+  <div class="summary-badge badge-p2">🟡 P2 · 健壮性 4 项</div>
+</div>
+
+<!-- ================================================================== -->
+<h2>🔴 P0 — 架构级问题（影响系统正确性）</h2>
+
+<!-- P0-1 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p01')">
+  <span class="severity-tag sev-p0">P0</span>
+  <div class="issue-title-group">
+    <div class="issue-title">Duration 被忽略 — 世界时钟不跟踪"进行中"的活动</div>
+    <div class="issue-loc">Step 1 · _get_next_world_time() · engine/story_engine.py</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">时间系统</span><span class="issue-tag">状态一致性</span></div>
+  <span class="chevron" id="chev-p01">&#9654;</span>
+</div>
+<div class="issue-body" id="p01">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+这是<b>最严重的架构缺陷</b>。每个角色的 PersonalEvent 有 <code>duration</code> 字段（表示活动持续分钟数），但世界时钟完全不使用它。
+
+<b>具体场景：</b>
+<ol>
+  <li>角色 A 在 <b>8:00</b> 开始上课（duration=90min，到 9:30）</li>
+  <li>角色 B 在 <b>8:30</b> 下课，世界时钟跳到 8:30</li>
+  <li>此时 Step 2 会为所有角色生成意图——包括正在上课的角色 A</li>
+  <li>角色 A 可能在 8:30 决定"去小卖部"——这完全破坏了合理性</li>
+</ol>
+
+<b>根因：</b>系统用"事件开始时间"驱动世界时钟，但完全忽略了"事件进行中"的状态。角色的 <code>current_location</code> 没有与 duration 锁定，LLM 可以在活动进行中生成完全背离的意图。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：引入"占用状态"（Occupancy Model）</b>
+
+在 StoryState 中维护 <code>occupancy: dict[str, dict]</code>：
+<code class="code-block">occupancy = {
+  "character_a": {
+    "busy_until": "08:00-09:30",  # 基于 total_minutes 计算
+    "locked_location": "教室A",
+    "activity": "数学课"
+  }
+}</code>
+
+在 Step 1 <code>_get_next_world_time()</code> 之后、Step 2 之前：
+<ol>
+  <li>根据当前时间清理过期的 occupancy 条目</li>
+  <li>对活跃角色的事件，如果有 duration，写入新 occupancy 条目</li>
+  <li>Step 2 中，被占用的角色 <b>不调用 LLM</b>，直接使用 locked_location 和 activity 作为 intent</li>
+  <li>被占用角色的 importance 设为当前活动的 importance（而非默认 2）</li>
+</ol>
+
+这与 <b>Inworld AI</b> 的 character state machine 思路一致——角色在"进行中"的状态下不应自主决策。
+</div>
+</div>
+</div>
+</div>
+
+<!-- P0-2 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p02')">
+  <span class="severity-tag sev-p0">P0</span>
+  <div class="issue-title-group">
+    <div class="issue-title">时间倒走风险 — next_event 语义歧义 + 无倒退保护</div>
+    <div class="issue-loc">Step 2 → Node S · _update_character_schedule_from_intent()</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">时间系统</span><span class="issue-tag">数据校验</span></div>
+  <span class="chevron" id="chev-p02">&#9654;</span>
+</div>
+<div class="issue-body" id="p02">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<b>语义混乱：</b><code>next_event_hour</code> 在不同地方的语义不一致：
+<ul>
+  <li>在 <code>_initialize_personal_schedules()</code> 中：hour 是绝对小时（0-23）</li>
+  <li>在 <code>character_action.py</code> prompt 中："几小时后（自行判断）"——这是 <b>相对偏移</b></li>
+  <li>在 <code>_update_character_schedule_from_intent()</code> 中：<code>total_minutes = current_hour*60 + offset_hours*60</code>——当做相对偏移处理</li>
+</ul>
+
+<b>两种不一致同时存在：</b>
+<ol>
+  <li>prompt 中"几小时后"与初始化 prompt 中"0-23"冲突——LLM 可能输出绝对小时或相对小时，无法区分</li>
+  <li>即使正确当做相对偏移，如果 LLM 返回 <code>next_event_hour=0</code>（"0小时后"），事件被安排在<b>同一分钟</b>，导致角色事件堆积</li>
+  <li>如果 LLM 错误地将绝对小时 22 当做相对偏移计算：当前 20:00，偏移 22 → total=42h → 第二天 18:00，产生巨大跳跃</li>
+</ol>
+<b>更隐蔽的问题：</b>没有<b>时间防倒退</b>校验。如果 LLM 输出的 next_event 计算出的时间点早于当前世界时间，会被写入 personal_schedule，导致世界时钟在下一步跳回过去。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案 A：统一时间语义（优先）</b>
+<ol>
+  <li>将 <code>next_event</code> 全部统一为<b>绝对时间表示</b>：<code>day, hour, minute</code></li>
+  <li>prompt 改为：<code>"下一个安排在哪天几点几分（day/hour/minute，必须晚于当前时间 {current_day}天{current_hour}时{current_minute}分）"</code></li>
+  <li>解析时直接用绝对时间构造 PersonalEvent，不再做偏移计算</li>
+</ol>
+
+<b>方案 B：时间防倒退校验（兜底）</b>
+<ol>
+  <li><code>_update_character_schedule_from_intent()</code> 末尾，解析出的 new_day/hour/minute 与当前世界时间比较</li>
+  <li>如果计算出的事件时间 ≤ 当前时间，自动增加 duration 分钟作为最小偏移（如 +10min）</li>
+  <li>记录 warning 日志</li>
+</ol>
+
+<b>方案 C：next_event 最小间隔</b>
+<ol>
+  <li>如果 LLM 返回 next_event_hour=0 且 next_event_minute=0，强制最小值 = 5 分钟</li>
+  <li>防止角色事件在同一分钟内无限堆积</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+
+<!-- P0-3 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p03')">
+  <span class="severity-tag sev-p0">P0</span>
+  <div class="issue-title-group">
+    <div class="issue-title">LLM 调用失败无优雅降级 — 单点故障导致整步中断</div>
+    <div class="issue-loc">Step 2/3/5/E/R · 所有 LLM 调用点</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">错误处理</span><span class="issue-tag">稳定性</span></div>
+  <span class="chevron" id="chev-p03">&#9654;</span>
+</div>
+<div class="issue-body" id="p03">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+当前代码中，所有 LLM 调用如果失败（网络超时、Rate Limit、JSON 解析失败），异常会向上传播到 <code>advance_one_step()</code>，导致整步失败。具体影响：
+
+<ul>
+  <li><b>Step 2 单角色失败 → N 个角色全部损失</b>：虽然并行调用是独立的，但如果 asyncio.gather 中一个任务抛异常且 return_exceptions=False，所有结果丢失</li>
+  <li><b>叙事生成失败 → 该步完全没有输出</b>：即使前面的交互、碰撞、对话都已正确计算</li>
+  <li><b>没有 retry 机制</b>：DeepSeek API 偶尔返回 malformed JSON 是已知现象，但代码中没有针对性的 retry</li>
+</ul>
+<b>发生概率：</b>以 8 个角色、每步 5-8 次 LLM 调用计算，运行 50 步 = 250-400 次调用。即使单次成功率 99%，累积失败概率也达到 92-98%。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>分层防护策略：</b>
+
+<b>1. Step 2 — 单角色隔离</b>
+<ol>
+  <li>确保 <code>asyncio.gather</code> 使用 <code>return_exceptions=True</code></li>
+  <li>失败的角色的 intent 使用<b>占位意图</b>：<code>intent="继续当前活动", destination=current_location, importance=2</code></li>
+  <li>失败的角色的 next_event 设为 <code>current_time + 30min</code>（让它在下次时钟推进时重新尝试）</li>
+  <li>记录失败日志，不阻塞其他角色</li>
+</ol>
+
+<b>2. 叙事生成 — fallback 叙事</b>
+<ol>
+  <li>LLM 调用最多 retry 2 次（每次 3s 间隔）</li>
+  <li>3 次都失败 → 生成<b>模板叙事</b>：<code>"{时间}。{角色名}在{位置}{事件描述}。"</code></li>
+  <li>模板叙事同样写入 timeline，标记 <code>source="fallback"</code></li>
+</ol>
+
+<b>3. JSON 解析 — 结构化 retry</b>
+<ol>
+  <li>LLM 返回后先尝试 <code>json.loads()</code></li>
+  <li>失败 → retry 一次（在 prompt 末尾加 "OUTPUT VALID JSON ONLY"）</li>
+  <li>仍然失败 → 使用 <code>ast.literal_eval()</code> 或正则提取关键字段</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+
+<!-- P0-4 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p04')">
+  <span class="severity-tag sev-p0">P0</span>
+  <div class="issue-title-group">
+    <div class="issue-title">目的地自由文本 — 碰撞检测按字符串匹配，精度极低</div>
+    <div class="issue-loc">Step 3 · detect_encounters() · engine/world_sim.py</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">碰撞检测</span><span class="issue-tag">字符串匹配</span></div>
+  <span class="chevron" id="chev-p04">&#9654;</span>
+</div>
+<div class="issue-body" id="p04">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+碰撞检测按 <code>destination</code> 字段分组，但 destination 是 LLM 自由生成的文本：
+<code class="code-block">"图书馆" vs "学校图书馆" → 不匹配
+"图书馆" vs "図書館" → 不匹配
+"走廊" vs "走廊上" → 不匹配</code>
+
+这会导致大量<b>假阴性</b>（本应相遇的角色被判定为擦肩而过），以及更隐蔽的<b>假阳性</b>（LLM 用词巧合导致两个完全不同地点被匹配，如"楼顶"和"实验楼顶层"）。
+
+<b>实际影响：</b>在 8 角色场景中，如果每个角色独自在不同措辞中引用同位置，碰撞发生率可能从预期的 30-40% 降到 5-10%，严重影响角色互动。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案 A：地点规范化（推荐，改动最小）</b>
+
+<ol>
+  <li>在 <code>StorySetting</code> 中定义 <b>标准化地点列表</b>（校园类约 10-15 个标准地点）</li>
+  <li>在 <code>character_action.py</code> prompt 中，将 destination 输出格式约束为<b>从预设列表中选择</b>：
+<code class="code-block">"destination": "从以下地点中选择一个：教室, 走廊, 图书馆, 食堂, 操场,
+体育馆, 社团活动室, 屋顶, 校门口, 教师办公室, 保健室, 中庭"</code>
+  </li>
+  <li>LLM 仍可自由选择，但词汇表被限制，保证匹配精度</li>
+  <li>提供 1-2 个通用 fallback："其他室内"、"其他户外"</li>
+</ol>
+
+<b>方案 B：语义匹配（更灵活，更复杂）</b>
+<ol>
+  <li>使用简单的嵌入向量（sentence-transformers）计算 destination 之间的余弦相似度</li>
+  <li>相似度 > 0.85 视为同地点</li>
+  <li>缺点：引入额外依赖，运行时开销</li>
+</ol>
+
+<b>推荐方案 A</b> — 校园剧场景地点有限，预设列表是最简单有效的方案。
+</div>
+</div>
+</div>
+</div>
+
+<!-- ================================================================== -->
+<h2>🟠 P1 — 设计缺陷（影响输出质量和体验）</h2>
+
+<!-- P1-1 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p11')">
+  <span class="severity-tag sev-p1">P1</span>
+  <div class="issue-title-group">
+    <div class="issue-title">叙事按场景独立生成 → 时间线顺序被破坏</div>
+    <div class="issue-loc">Step 5 · _generate_narrative_with_foreshadowing()</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">叙事质量</span><span class="issue-tag">时序</span></div>
+  <span class="chevron" id="chev-p11">&#9654;</span>
+</div>
+<div class="issue-body" id="p11">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+叙事按 <code>location</code> 分组后独立生成。如果场景 A 的事件发生在场景 B 之前，但叙事顺序是"图书馆"→"教室"，读者会先读到逻辑上后发生的事。
+
+<b>具体场景：</b>
+<ol>
+  <li>10:00 — 角色 A 从走廊去图书馆，路上与角色 B 发生碰撞</li>
+  <li>10:00 — 角色 C 在教室自习，角色 D 进来……</li>
+  <li>叙事输出：先写"【教室】……"，再写"【图书馆】……"</li>
+  <li>读者困惑：角色 A 不是在走廊遇到 B 了吗，怎么已经在教室了？</li>
+</ol>
+
+虽然它们都是 10:00 的事件（"同时"），但在读者感知中，"走廊偶遇"应该是发生在"进入图书馆"之前的。分组独立生成完全丢失了这个因果链。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：统一单次 LLM 调用生成所有场景叙事</b>
+
+<ol>
+  <li>不再按场景独立调用 LLM，而是将<b>所有场景的互动数据一次性传入</b>同一个 narrative prompt</li>
+  <li>prompt 中按角色时间线排序（而不是按位置排序），并提供时间顺序指导：
+<code class="code-block">【本时间段的事件时间线】
+10:00 — {角色A}在走廊遇到{角色B}，简短对话后前往图书馆
+10:00 — {角色C}在教室自习，{角色D}进入
+请按时间线顺序写作，先发生的先写。</code>
+  </li>
+  <li>输出仍保持场景分组格式：<code>{"narrative": "【走廊】……\n\n【教室】……\n\n【图书馆】……"}</code></li>
+  <li>这样 LLM 有全局视角，可以在场景间做自然过渡</li>
+</ol>
+
+<b>权衡：</b>单次调用 token 量更大（所有场景数据一起传入），但换来了时序正确性和场景间过渡质量。如果场景过多（>4个），可以分批 2-3 个场景一组，但组内仍保持统一调用。
+</div>
+</div>
+</div>
+</div>
+
+<!-- P1-2 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p12')">
+  <span class="severity-tag sev-p1">P1</span>
+  <div class="issue-title-group">
+    <div class="issue-title">角色对话生成无全局一致性 — 同一角色的多个对话可能矛盾</div>
+    <div class="issue-loc">Step 3B · generate_dialogue() · engine/world_sim.py</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">对话质量</span><span class="issue-tag">一致性</span></div>
+  <span class="chevron" id="chev-p12">&#9654;</span>
+</div>
+<div class="issue-body" id="p12">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+对话生成是<b>按碰撞对独立并行</b>的。如果角色 A 在同一时间步与角色 B 和角色 C 都有 DIALOGUE 碰撞：
+<ol>
+  <li>LLM 调用 A-B 对话：A 说"我讨厌下雨天"</li>
+  <li>LLM 调用 A-C 对话：A 说"我最喜欢下雨天了"</li>
+</ol>
+两个对话是独立 prompt，互不感知。A 在两个对话中表现出完全矛盾的态度，读者会察觉。
+
+<b>更隐蔽的问题：</b>A-B 对话的 outcome 可能涉及情绪变化（"A 变得沮丧"），但 A-C 对话使用的是 A 调用前的情绪，不会反映这个变化。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：对话前注入角色的"当前状态摘要" + 情绪共享</b>
+
+<ol>
+  <li>在<b>所有对话 LLM 调用之前</b>，先生成一个"角色初始状态快照"：每个角色的当前心情、最近记忆、意图摘要</li>
+  <li>将"状态快照"注入<b>每个</b>对话 prompt，确保所有对话都从同一基线出发</li>
+  <li>对话结果收集后，如果同一角色参与多段对话，按顺序（先发生的）更新其情绪描述，后续对话以更新后的情绪为输入</li>
+  <li>如果对话数量少（≤3），可以尝试<b>合并为一次 LLM 调用</b>：将同一位置的所有碰撞合并为一个"集体对话" prompt</li>
+</ol>
+
+<b>简单版（最小改动）：</b>在对话 prompt 中增加约束：
+<code>"{角色A}可能正在或即将与其他人互动。请确保其在本段对话中的态度、
+心情和言论与角色设定一致，不与其在当前时间步的其他互动冲突。"</code>
+</div>
+</div>
+</div>
+</div>
+
+<!-- P1-3 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p13')">
+  <span class="severity-tag sev-p1">P1</span>
+  <div class="issue-title-group">
+    <div class="issue-title">记忆淘汰逻辑缺陷 — 二元 is_reflection 排序破坏重要性优先级</div>
+    <div class="issue-loc">Step 4 · memory.add_memory() · engine/memory.py</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">记忆系统</span><span class="issue-tag">算法缺陷</span></div>
+  <span class="chevron" id="chev-p13">&#9654;</span>
+</div>
+<div class="issue-body" id="p13">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+记忆淘汰排序键：<code>(is_reflection, importance, step)</code> 降序。
+
+<b>问题：</b><code>is_reflection</code> 是布尔值（True/False）。排序后，<b>所有</b>反思记忆（不论 importance 多低）都排在<b>所有</b>普通记忆（不论 importance 多高）之前。
+
+<b>后果：</b>一个 importance=1 的冗余反思记忆不会被淘汰，而一个 importance=9 的关键事件记忆却被淘汰。
+
+<b>案例：</b>
+<code class="code-block">记忆 A: is_reflection=True, importance=1, step=50  → 保留
+记忆 B: is_reflection=True, importance=2, step=49  → 保留 
+记忆 C: is_reflection=False, importance=9, step=48 → 淘汰 ❌
+记忆 D: is_reflection=False, importance=7, step=47 → 淘汰 ❌</code>
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：加权排序替代布尔优先</b>
+
+将 <code>is_reflection</code> 从排序键改为权重加分：
+
+<code class="code-block">def add_memory(self, memories, new_memory, max_count=100):
+    if len(memories) >= max_count:
+        # 加权评分替代二元排序
+        def score(m):
+            base = m.get("importance", 0) * 10  # 重要性权重 x10
+            base += m.get("step", 0)             # 近期性
+            if m.get("is_reflection"):
+                base += REFLECTION_BONUS         # 反思固定加分 (e.g., 30)
+            return base
+        memories.sort(key=score, reverse=True)
+        memories = memories[:max_count]
+    memories.append(new_memory)</code>
+
+这样反思记忆有优势但不绝对——一个 importance=9 的普通记忆（得分 90）会高于 importance=1 的反思记忆（得分 10+30=40）。
+
+<b>REFECTION_BONUS</b> 建议设为 20-30（相当于普通记忆 2-3 点 importance 的提升）。
+</div>
+</div>
+</div>
+</div>
+
+<!-- P1-4 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p14')">
+  <span class="severity-tag sev-p1">P1</span>
+  <div class="issue-title-group">
+    <div class="issue-title">伏笔缓冲区无过期机制 — 陈旧伏笔永远不会被清理</div>
+    <div class="issue-loc">Node A · foreshadow_buffer · Step 5 消费</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">叙事系统</span><span class="issue-tag">内存管理</span></div>
+  <span class="chevron" id="chev-p14">&#9654;</span>
+</div>
+<div class="issue-body" id="p14">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+伏笔 buffer 的流程：
+<ol>
+  <li>Type B (foreshadow) 模式：LLM 生成伏笔 → 写入 buffer</li>
+  <li>正常叙事：取出最多 5 条伏笔注入 prompt → 但只有被"消费"的才清空</li>
+</ol>
+
+<b>问题：</b>如果连续多步都是 cooldown/full 模式，步中 importance 一直 ≥ 4，那伏笔 mode 永远不会触发。已生成的伏笔堆积在 buffer 中，没有过期机制。
+
+<b>更隐蔽的问题：</b>伏笔可能已经"语境过时"。例如第 10 步生成的伏笔"走廊上似乎有人跟踪"——到了第 25 步，故事已经发展到了午休时间，这个伏笔的语境已经不存在了，但系统仍会在下一次叙事中尝试融入。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案 A：伏笔过期机制</b>
+
+<ol>
+  <li>每条伏笔追加 <code>created_step</code> 字段</li>
+  <li>在每次叙事前，清理超过 <code>FORESHADOW_MAX_AGE</code>（建议 8 步）的伏笔</li>
+  <li>过期的伏笔写入角色记忆（importance=3，作为"有过这个想法但没发生"的标记）</li>
+</ol>
+
+<b>方案 B：伏笔强制消费窗口</b>
+
+<ol>
+  <li>如果 buffer 非空且连续 3 步未触发叙事（skip），在第 4 步强制触发一次 light 叙事（即使 importance < 4）</li>
+  <li>在 light 叙事中注入伏笔</li>
+  <li>这样伏笔不会无限期等待，有一个强制消费窗口</li>
+</ol>
+
+<b>推荐方案 A + B 结合</b>：过期清理 + 强制窗口，双重保险。
+</div>
+</div>
+</div>
+</div>
+
+<!-- P1-5 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p15')">
+  <span class="severity-tag sev-p1">P1</span>
+  <div class="issue-title-group">
+    <div class="issue-title">角色并行决策互不感知 — 可能导致逻辑冲突</div>
+    <div class="issue-loc">Step 2 · _generate_character_intent() 并行调用</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">一致性</span><span class="issue-tag">并行</span></div>
+  <span class="chevron" id="chev-p15">&#9654;</span>
+</div>
+<div class="issue-body" id="p15">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+角色意图生成是<b>完全并行的</b>——每个角色看到的"世界状态快照"都是一样的（同一步快照），但<b>不知道其他角色在同一时间步决定做什么</b>。
+
+<b>冲突场景：</b>
+<ol>
+  <li>角色 A 决定"去图书馆找 B 道歉"</li>
+  <li>角色 B 同时决定"去校门口等 C"</li>
+  <li>A 到了图书馆 → B 不在 → A 的意图失败但系统不知道</li>
+</ol>
+
+当前 Step 3 的碰撞检测只能解决"同位置"的碰撞，不能解决"意图指向某角色但目标不在"的情况。intent 中的"找 B"意图被忽略了。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：意图后处理 — 交叉校验</b>
+
+在 Step 3 碰撞检测之前，加一个轻量规则层：
+
+<ol>
+  <li>解析所有角色的 intent，识别"目标指向型意图"：正则匹配 "找/见/等/约 + 角色名"</li>
+  <li>如果角色 A 的意图指向角色 B，但角色 B 的 destination ≠ 角色 A 的 destination → <b>意图失败</b></li>
+  <li>意图失败的角色的 actual_action 追加 "（未遇到 {B}）"，写入记忆（importance=3）</li>
+  <li>可选：触发角色 A 的备选行动（LLM 轻量 re-roll）或直接标记为"等待/空转"</li>
+</ol>
+
+这是一个纯规则处理，不增加 LLM 调用，实现成本低。
+</div>
+</div>
+</div>
+</div>
+
+<!-- ================================================================== -->
+<h2>🟡 P2 — 健壮性与边界问题</h2>
+
+<!-- P2-1 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p21')">
+  <span class="severity-tag sev-p2">P2</span>
+  <div class="issue-title-group">
+    <div class="issue-title">Token 膨胀 — 上下文随步数线性增长</div>
+    <div class="issue-loc">Step 2 · 角色意图 prompt + Step 5 · story_summary</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">性能</span><span class="issue-tag">token 成本</span></div>
+  <span class="chevron" id="chev-p21">&#9654;</span>
+</div>
+<div class="issue-body" id="p21">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+<b>Step 2 每个角色的 prompt 包含：</b>
+<ul>
+  <li>完整角色档案：~500 tokens</li>
+  <li>8 条记忆：~800 tokens</li>
+  <li>关系摘要（7 个角色）：~500 tokens</li>
+  <li>世界快照（所有角色位置/心情）：~600 tokens</li>
+  <li>Scratchpad：~300 tokens</li>
+  <li>World events：~200 tokens</li>
+  <li>System prompt：~300 tokens</li>
+  <li><b>合计：~3200 tokens/角色</b></li>
+</ul>
+
+<b>Step 5 叙事 prompt：</b>
+<ul>
+  <li>story_summary（50步 × 200字）：~6000 tokens</li>
+  <li>角色卡：~800 tokens</li>
+  <li>互动数据：~500 tokens</li>
+  <li>System prompt：~400 tokens</li>
+  <li><b>合计：~7700 tokens</b></li>
+</ul>
+
+8 角色 × 3200 = 25600 tokens（Step 2）+ 7700（Step 5）= <b>~33k tokens/步</b>（不含对话生成和反思）。
+
+DeepSeek-chat 上下文上限 64k tokens。50 步后，仅 story_summary 就占 ~6k tokens，加上 prompt 基础部分（~10k），目前仍有余量。但 memory 的检索结果随故事推进越来越长，最终会超出限制。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>短期（无需改架构）：</b>
+<ol>
+  <li>记忆检索从 8 条降到 5 条（最新 3 条 + 最重要 2 条）</li>
+  <li>story_summary 截断从 200 字/条降到 100 字/条，或从 50 步降到 30 步</li>
+  <li>关系摘要只包含"有变化的关系"，无变化的不列出</li>
+</ol>
+
+<b>中期（需改架构）：</b>
+<ol>
+  <li>引入 LLM 压缩：每 20 步调用一次摘要 LLM，将 story_summary 从 50×200字 压缩为一段 600-800 字的精炼摘要</li>
+  <li>memory 分"热记忆"（最近 5 步，完整）+ "冷记忆"（摘要化，只保留关键信息）</li>
+</ol>
+
+<b>长期参考 — Stanford 论文做法：</b>
+使用 embedding 向量做记忆检索，只取最相关的 3 条而非固定 8 条，大幅减少 token 消耗。
+</div>
+</div>
+</div>
+</div>
+
+<!-- P2-2 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p22')">
+  <span class="severity-tag sev-p2">P2</span>
+  <div class="issue-title-group">
+    <div class="issue-title">cooldown 状态无 re-entry 保护 — 连续高压事件导致状态混乱</div>
+    <div class="issue-loc">Node A · arc 状态机 · engine/story_engine.py</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">状态机</span><span class="issue-tag">边界情况</span></div>
+  <span class="chevron" id="chev-p22">&#9654;</span>
+</div>
+<div class="issue-body" id="p22">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+当前状态机：
+
+<code class="code-block">normal → [imp≥7] → cooldown (3步) → [3步后] → check → normal</code>
+
+<b>问题场景：</b>
+<ol>
+  <li>Step 5: imp=8 → 进入 cooldown，cooldown_remaining=3</li>
+  <li>Step 6: (cooldown) imp=7 → cooldown_remaining=2 ✓（正常递减）</li>
+  <li>Step 7: (cooldown) imp=9 → cooldown_remaining=1 ✓</li>
+  <li>Step 8: (cooldown) cooldown_remaining=0 → 进入 check</li>
+</ol>
+
+这个看起来正常。但：
+<ol>
+  <li>如果在 cooldown 期间（Step 6），又出现了一个 need_recalc 标记（比如世界事件触发）</li>
+  <li>系统可能重新计算弧状态 → 可能把 cooldown_remaining 重置回 3</li>
+  <li>结果：cooldown 无限延长，故事永远无法回到 normal</li>
+</ol>
+
+<b>根因：</b>状态机没有"re-entry 保护"——进入 cooldown 后，除非超过 cooldown_remaining，否则不应该允许任何条件重新触发 cooldown 入口。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：cooldown 期间忽略高重要性重入</b>
+
+<code class="code-block">def _update_arc_state(self, max_importance, has_events, has_encounters):
+    state = self.state
+    
+    if state.arc_state == "cooldown":
+        state.cooldown_remaining -= 1
+        # 🔒 cooldown 期间不响应任何状态切换
+        if state.cooldown_remaining <= 0:
+            state.arc_state = "check"
+        return  # 直接返回，不继续判断
+    
+    if state.arc_state == "normal":
+        if max_importance >= ARC_HIGH_IMPORTANCE:
+            state.arc_state = "cooldown"
+            state.cooldown_remaining = ARC_COOLDOWN_STEPS
+            # 记录进入 cooldown 时的最大 importance
+            state.arc_triggered_by = max_importance
+            return</code>
+
+关键改动：
+<ol>
+  <li>cooldown 状态的处理放在最前面，return 后不再继续判断</li>
+  <li>不再允许 normal → cooldown 的重入（即使 imp≥7，在 cooldown 期间也忽略）</li>
+</ol>
+</div>
+</div>
+</div>
+</div>
+
+<!-- P2-3 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p23')">
+  <span class="severity-tag sev-p2">P2</span>
+  <div class="issue-title-group">
+    <div class="issue-title">反思只在有叙事的步骤触发 — skip 过多导致反思长期不触发</div>
+    <div class="issue-loc">Node R · reflection step 计数</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">认知系统</span><span class="issue-tag">触发逻辑</span></div>
+  <span class="chevron" id="chev-p23">&#9654;</span>
+</div>
+<div class="issue-body" id="p23">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+反思触发条件：<code>current_step % 3 == 0</code> <b>且 有叙事</b>。
+
+<b>场景：</b>
+<ol>
+  <li>Step 9-10-11: 全是 skip（importance<4，无碰撞）→ 无叙事 → 反思不触发</li>
+  <li>Step 12: full 叙事 → 触发反思（时隔 3 步）</li>
+  <li>Step 13-14: skip → 无反思</li>
+  <li>Step 15: full → 反思触发</li>
+</ol>
+
+周期实际变成 ~6 步而不是 3 步。如果 skip 连续 5 步（上限），反思间隔可以拉长到 ~8 步。反思是角色成长的关键机制，长期不反思会导致角色行为缺乏发展性。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案：反思步数基于"有叙事的步数"而非绝对步数</b>
+
+<code class="code-block"># 改为跟踪实际叙事步数
+if narrative_mode != "skip":
+    state.narrative_step_count += 1
+    
+if state.narrative_step_count % REFLECTION_INTERVAL == 0:
+    await self._run_reflections(...)</code>
+
+这样确保反思始终基于实际的故事进展，不受 skip 步数影响。
+
+<b>权衡：</b>如果 skip 步数占比很高（>60%），反思频率会比预期高。可设上限：连续反思间隔至少 2 个叙事步。
+</div>
+</div>
+</div>
+</div>
+
+<!-- P2-4 -->
+<div class="issue-card">
+<div class="issue-header" onclick="toggle('p24')">
+  <span class="severity-tag sev-p2">P2</span>
+  <div class="issue-title-group">
+    <div class="issue-title">auto_event 无消费保障 — 可能生成后立即过期</div>
+    <div class="issue-loc">Node E · auto_event + process_pending_events</div>
+  </div>
+  <div class="issue-tags"><span class="issue-tag">事件系统</span><span class="issue-tag">资源浪费</span></div>
+  <span class="chevron" id="chev-p24">&#9654;</span>
+</div>
+<div class="issue-body" id="p24">
+
+<div class="problem-block">
+<div class="block-label">问题分析</div>
+<div class="problem-text">
+auto_event 生成周期：<code>steps_since_auto_event >= 12</code>
+事件有效周期：<code>active_until_step = current_step + 5 (plot) / +3 (env)</code>
+
+<b>问题：</b>如果生成的事件没有影响任何角色（<code>_judge_event_impact()</code> 返回空 affected_characters），事件就变成了"幽灵事件"——它存在但被忽略了，然后过期消失。
+
+更糟的情况：事件影响了角色，但因为接下来的几步恰好都是 skip（importance<4），事件在 cooldown 期内过期，没有被写入任何叙事。
+
+<b>浪费：</b>每次 auto_event 消耗 2 次 LLM 调用（生成 + 影响判定）。如果 30% 的事件没有被消费，相当于浪费了 30% 的事件 LLM 成本。
+</div>
+</div>
+
+<div class="solution-block">
+<div class="block-label">推荐方案</div>
+<div class="solution-text">
+<b>方案 A：事件触发条件叙事</b>
+
+<ol>
+  <li>当 auto_event 有 affected_characters 时，将该步的 narrative_mode 强制设为 "full"（覆盖 arc 状态）</li>
+  <li>这样确保事件被叙事消费，不会无声过期</li>
+</ol>
+
+<b>方案 B：事件持续性追踪</b>
+
+<ol>
+  <li>事件被 affected 角色写入其记忆（importance=event importance），即使没有叙事</li>
+  <li>在下次叙事时，LLM 可以通过 story_summary 中的记忆引用了解事件</li>
+  <li>active_until_step 延长到 8 步（给 skip 序列更多时间窗口）</li>
+</ol>
+
+<b>推荐 A</b>——最直接有效。
+</div>
+</div>
+</div>
+</div>
+
+<!-- ================================================================== -->
+<h2>📋 综合改进建议</h2>
+
+<div class="recommendations">
+  <div class="rec-item">
+    <div class="rec-title">1. 引入"World Time Controller"抽象层</div>
+    将时间推进逻辑从 engine 中独立为 <code>engine/world_clock.py</code>，统一管理 occupancy、时间防倒退、跨日计算。当前这些逻辑散布在 4-5 个方法中，耦合度高。
+  </div>
+  <div class="rec-item">
+    <div class="rec-title">2. 建立 Location Registry</div>
+    在 <code>config.py</code> 中维护标准化地点列表，所有 prompt 的 destination 字段强制从列表中选择。同时为每个地点维护"可同时容纳人数"，用于碰撞检测优化。
+  </div>
+  <div class="rec-item">
+    <div class="rec-title">3. 统一 LLM 调用的 retry + fallback 层</div>
+    封装一个 <code>llm_call_with_retry(prompt, max_retries=2, fallback=None)</code> 函数，所有 LLM 调用点统一使用。内置 JSON 解析重试和模板 fallback。
+  </div>
+  <div class="rec-item">
+    <div class="rec-title">4. 每 10 步自动保存 checkpoint</div>
+    当前存档全靠手动。如果 LLM 调用在 Step 7 失败，Step 1-6 的计算结果全部丢失。每 10 步自动保存一个 <code>.checkpoint</code> 文件，失败后可以从最近的 checkpoint 恢复。
+  </div>
+  <div class="rec-item">
+    <div class="rec-title">5. 增加调试面板的"步内状态"视图</div>
+    在 Gradio 界面中增加一个可折叠面板，显示当前步的：所有角色的 intent、碰撞结果、弧状态、narrative_mode 选择理由。这对调试时间问题和碰撞问题至关重要。
+  </div>
+</div>
+
+</div>
+
+<script>
+function toggle(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+// 默认全部展开
+document.querySelectorAll('.issue-body').forEach(el => el.classList.add('open'));
+document.querySelectorAll('.chevron').forEach(el => el.classList.add('open'));
+</script>
+</body>
+</html>

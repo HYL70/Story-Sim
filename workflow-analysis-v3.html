@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story-Sim 第三轮流程分析 — 修复后状态评估</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Segoe UI', 'Noto Sans SC', sans-serif; background: #f8f7f4; color: #2c2c2a; line-height: 1.75; font-size: 14px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; color: #1a1a1a; }
+.subtitle { font-size: 13px; color: #888780; margin-bottom: 20px; }
+h2 { font-size: 18px; font-weight: 600; margin: 40px 0 16px; padding: 10px 16px; background: #fff; border-left: 4px solid #534ab7; border-radius: 4px; }
+h3 { font-size: 15px; font-weight: 600; margin: 24px 0 10px; color: #3c3489; }
+
+.verdict-bar {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0 24px;
+  flex-wrap: wrap;
+}
+.verdict-card {
+  flex: 1;
+  min-width: 160px;
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  border: 0.5px solid #d3d1c7;
+  text-align: center;
+}
+.verdict-card .num { font-size: 28px; font-weight: 700; }
+.verdict-card .label { font-size: 11px; color: #888780; margin-top: 4px; }
+
+.module-card {
+  background: white;
+  border-radius: 12px;
+  border: 0.5px solid #d3d1c7;
+  margin: 20px 0;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.module-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+  border-bottom: 0.5px solid #e8e6df;
+}
+.module-header:hover { background: #f1efe8; }
+.module-id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.module-title { font-weight: 600; font-size: 15px; flex: 1; }
+.module-subtitle { font-size: 11px; color: #888780; margin-left: 6px; }
+.module-grade {
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.module-body { padding: 0 22px 22px; display: none; }
+.module-body.open { display: block; }
+
+.analysis-section { margin: 16px 0; }
+.analysis-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888780;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.fix-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.fixed { background: #e1f5ee; color: #0f6e56; }
+.partial { background: #faeeda; color: #854f0b; }
+.unfixed { background: #faece7; color: #993c1d; }
+.new-issue { background: #fbeaf0; color: #993556; }
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 10px 0;
+}
+.compare-table th {
+  text-align: left;
+  padding: 7px 10px;
+  background: #f1efe8;
+  font-weight: 600;
+  font-size: 11px;
+  border-bottom: 0.5px solid #d3d1c7;
+}
+.compare-table td {
+  padding: 7px 10px;
+  border-bottom: 0.5px solid #e8e6df;
+  vertical-align: top;
+  line-height: 1.6;
+}
+.compare-table tr:hover td { background: #faf9f6; }
+
+.code-inline {
+  background: #f1efe8;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 11px;
+  color: #534ab7;
+}
+
+.fix-detail {
+  padding: 12px 16px;
+  background: #e1f5ee;
+  border-left: 3px solid #0f6e56;
+  border-radius: 0 8px 8px 0;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.fix-detail .label { font-weight: 600; color: #0f6e56; }
+
+.issue-box {
+  padding: 12px 16px;
+  background: #fdfaee;
+  border-left: 3px solid #e8c96a;
+  border-radius: 0 8px 8px 0;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.issue-box h4 { font-weight: 600; margin-bottom: 4px; color: #444441; }
+.issue-box.severe { border-left-color: #d85a30; background: #fef4f0; }
+
+.record-card {
+  background: #f0effc;
+  border: 0.5px solid #ccb8e0;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.record-card h4 { margin: 0 0 6px; color: #3c3489; }
+
+.quick-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 20px;
+}
+.quick-nav a {
+  font-size: 11px;
+  padding: 3px 10px;
+  background: white;
+  border: 0.5px solid #d3d1c7;
+  border-radius: 14px;
+  color: #534ab7;
+  text-decoration: none;
+}
+.quick-nav a:hover { background: #eeedfe; border-color: #534ab7; }
+
+.chevron {
+  transition: transform 0.2s;
+  font-size: 11px;
+  color: #888780;
+}
+.chevron.open { transform: rotate(90deg); }
+
+@media (max-width: 768px) {
+  .verdict-bar { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Story-Sim 第三轮流程分析报告</h1>
+<p class="subtitle">基于 2026-06-01 修复后代码的重新评估 | 对比第一轮 (workflow-analysis) 和审计报告 (workflow-audit-v2) 的基准</p>
+
+<!-- 快速导航 -->
+<div class="quick-nav">
+  <a href="#verdict">总评</a>
+  <a href="#scoreboard">修复清单</a>
+  <a href="#m0">初始化</a>
+  <a href="#ms">日程</a>
+  <a href="#m1">世界时钟</a>
+  <a href="#me">世界事件</a>
+  <a href="#m2">意图生成</a>
+  <a href="#m3">世界模拟</a>
+  <a href="#ma">弧追踪</a>
+  <a href="#m5">叙事编排</a>
+  <a href="#mr">反思</a>
+  <a href="#remaining">剩余问题</a>
+  <a href="#new">新发现</a>
+</div>
+
+<!-- ============================================================ -->
+<!-- 总体评价 -->
+<!-- ============================================================ -->
+<h2 id="verdict">总体评价</h2>
+
+<div class="verdict-bar">
+  <div class="verdict-card">
+    <div class="num" style="color:#0f6e56;">8.5<span style="font-size:14px;font-weight:400;">/10</span></div>
+    <div class="label">当前逻辑合理性（修复后）</div>
+  </div>
+  <div class="verdict-card">
+    <div class="num" style="color:#185fa5;">13</div>
+    <div class="label">已修复问题数</div>
+  </div>
+  <div class="verdict-card">
+    <div class="num" style="color:#854f0b;">6</div>
+    <div class="label">仍存在的问题</div>
+  </div>
+  <div class="verdict-card">
+    <div class="num" style="color:#993556;">2</div>
+    <div class="label">修复引入的新问题</div>
+  </div>
+</div>
+
+<p style="font-size:13px; margin-bottom:12px;">
+与第一轮分析相比提升 <b>+1.0 分</b>（7.5→8.5）。三个 P0 结构性缺陷全部修复：关系数值闭环已建立、affected_characters 已消费、记忆检索有了关键词。审计报告 N1-N7 全部修复。剩余的 6 个问题主要是设计层面的优化（碰撞阈值、时间窗口等），以及 2 个修复带来的新发现。
+</p>
+
+<p style="font-size:12px; color:#888780;">
+<b>2026-06-01 修复范围：</b>完整审计 story_engine.py、world_sim.py、memory.py、world_event.py、relationship.py 以及 4 个 prompt 模块（narrative/character_action/world_sim/reflection）。<b>未修改：</b>config.py（除新增常量）、schemas.py（无结构变更）、time_controller.py、narrative_renderer.py、character.py。
+</p>
+
+<!-- ============================================================ -->
+<!-- 修复计分板 -->
+<!-- ============================================================ -->
+<h2 id="scoreboard">修复计分板</h2>
+
+<table class="compare-table">
+  <tr><th width="5%">状态</th><th width="8%">编号</th><th width="28%">问题</th><th width="12%">来源</th><th>修复方式</th></tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>P0</b></td>
+    <td>关系数值永不更新</td>
+    <td>analysis</td>
+    <td>world_sim.py prompt 增加 <span class="code-inline">relationship_delta</span> 输出字段（trust/affection, -10~+10）；story_engine.py Step 3 中应用 delta 到 relationship 模块</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>P0</b></td>
+    <td>affected_characters 判定未消费</td>
+    <td>analysis</td>
+    <td>新增 <span class="code-inline">char_affected_events</span> 索引，Step 2 intent 生成时传入 <span class="code-inline">affected_events</span> 参数实现差异化 prompt</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>P0</b></td>
+    <td>记忆检索缺 query_keywords</td>
+    <td>analysis</td>
+    <td>新增 <span class="code-inline">_extract_query_keywords()</span> 方法，从 location/mood/contacts/plan 提取 5-15 关键词；intent 生成时传入</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N1</b></td>
+    <td>arc_state 局部快照不一致</td>
+    <td>audit-v2</td>
+    <td>删除局部变量，所有叙事模式判定统一使用 <span class="code-inline">self.state.arc_state</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N2</b></td>
+    <td>占用角色 schedule 空窗</td>
+    <td>audit-v2</td>
+    <td>occupancy 过期清理时自动写入 <span class="code-inline">PersonalEvent("自由活动", importance=3)</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N3</b></td>
+    <td>伏笔 FIFO 消费</td>
+    <td>audit-v2</td>
+    <td><span class="code-inline">sorted(buffer, key=lambda e: -created_step)[:5]</span> — 最新伏笔优先</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N4</b></td>
+    <td>对话异常静默吞没</td>
+    <td>audit-v2</td>
+    <td>显式检查 gather 结果，<span class="code-inline">isinstance(result, Exception)</span> 时记录 error + 兜底</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N5</b></td>
+    <td>重复事件遗留</td>
+    <td>audit-v2</td>
+    <td>_pop_scheduled_events 使用 <span class="code-inline">taken</span> 标志，重复事件直接丢弃并 log warning</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N6</b></td>
+    <td>prompt 仅 system role</td>
+    <td>audit-v2</td>
+    <td>narrative.py / character_action.py / world_sim.py 追加 <span class="code-inline">{"role":"user","content":"请按照要求输出 JSON。"}</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N7</b></td>
+    <td>跨日判断过于简单</td>
+    <td>audit-v2</td>
+    <td>改用总分钟数比较（<span class="code-inline">target_total vs current_total</span>），纳入 minute 维度</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N/A</b></td>
+    <td>next_event 无校验</td>
+    <td>analysis</td>
+    <td>新增反倒退校验（<span class="code-inline">ANTI_REVERSE_MIN_MINUTES=5</span>），自动修正到 5 分钟后</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>N/A</b></td>
+    <td>伏笔过期清理</td>
+    <td>analysis</td>
+    <td>FORESHADOW_MAX_AGE=8，过期写入记忆，recency 消费</td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge fixed">✅</span></td>
+    <td><b>P2-12</b></td>
+    <td>反思基于叙事步</td>
+    <td>analysis</td>
+    <td>使用 <span class="code-inline">narrative_step_count</span> 而非 <span class="code-inline">current_step</span></td>
+  </tr>
+
+  <tr style="border-top: 2px solid #d3d1c7;">
+    <td><span class="fix-badge unfixed">❌</span></td>
+    <td><b>P1</b></td>
+    <td>碰撞判定忽略情境修饰</td>
+    <td>analysis</td>
+    <td>— <span style="color:#888;font-size:10px;">未修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge unfixed">❌</span></td>
+    <td><b>P1</b></td>
+    <td>精确匹配 → 相近时间无法互动</td>
+    <td>analysis</td>
+    <td>— <span style="color:#888;font-size:10px;">未修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge unfixed">❌</span></td>
+    <td><b>P1</b></td>
+    <td>light_mode 未实际生效</td>
+    <td>analysis</td>
+    <td>— <span style="color:#888;font-size:10px;">未修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge unfixed">❌</span></td>
+    <td><b>P2</b></td>
+    <td>auto_event 固定间隔</td>
+    <td>analysis</td>
+    <td>— <span style="color:#888;font-size:10px;">未修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge unfixed">❌</span></td>
+    <td><b>N8</b></td>
+    <td>LLM 并发控制</td>
+    <td>audit-v2</td>
+    <td>— <span style="color:#888;font-size:10px;">未修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="fix-badge unfixed">❌</span></td>
+    <td><b>N9</b></td>
+    <td>add_player_event 双路径</td>
+    <td>audit-v2</td>
+    <td>— <span style="color:#888;font-size:10px;">未修复</span></td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- 逐模块重新评估 -->
+<!-- ============================================================ -->
+<h2 id="m0">模块 0：故事初始化</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod0')">
+    <span class="module-id" style="background:#eeedfe;color:#534ab7;">0</span>
+    <span class="module-title">init_story()</span>
+    <span class="module-grade" style="background:#e1f5ee;color:#0f6e56;">A（不变）</span>
+    <span class="chevron" id="chev-mod0">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod0">
+    <p style="font-size:13px;">本模块未修改。之前识别的"名称模糊匹配"和"关系阈值语义"两个问题属于低优先级改进项，当前实现满足功能需求。</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 S -->
+<!-- ============================================================ -->
+<h2 id="ms">模块 S：日程初始化</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modS')">
+    <span class="module-id" style="background:#e1f5ee;color:#0f6e56;">S</span>
+    <span class="module-title">_initialize_personal_schedules()</span>
+    <span class="module-grade" style="background:#e1f5ee;color:#0f6e56;">A（↑ B→A）</span>
+    <span class="chevron" id="chev-modS">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modS">
+
+    <div class="fix-detail">
+      <span class="label">N7 修复：</span>跨日判断从 <span class="code-inline">actual_hour <= base_hour</span> 改为 <span class="code-inline">target_total = h*60+m; if target_total <= current_total → day+1</span>。纳入了分钟维度，消除了 LLM 返回 hour=base_hour 但 minute 靠后时的误判。
+    </div>
+
+    <p style="font-size:13px; margin-top:8px;"><b>评分提升原因：</b>跨日判断逻辑从粗粒度小时比较升级为精确到分钟的总分钟数比较，消除了 N7 报告中的核心风险。</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 1 -->
+<!-- ============================================================ -->
+<h2 id="m1">Step 1：世界时钟推进</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod1')">
+    <span class="module-id" style="background:#faeeda;color:#854f0b;">1</span>
+    <span class="module-title">_get_next_world_time() + Occupancy Model</span>
+    <span class="module-grade" style="background:#e1f5ee;color:#0f6e56;">A（↑ A→A+）</span>
+    <span class="chevron" id="chev-mod1">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod1">
+
+    <div class="fix-detail">
+      <span class="label">N2 修复：</span>占用角色在 occupancy 过期清理时自动写入 <span class="code-inline">PersonalEvent("自由活动", importance=3, source="auto")</span>。事件设置在 busy_until 时间点的下一分钟，角色不会从调度系统中消失。
+    </div>
+
+    <div class="fix-detail">
+      <span class="label">N5 修复：</span>_pop_scheduled_events 中增加 <span class="code-inline">taken</span> 标志，相同 (day, hour, minute) 的重复事件直接丢弃并记录 warning，防止世界时钟在同一时间点原地踏步。
+    </div>
+
+    <p style="font-size:13px; margin-top:8px;">Step 1 是三个 bug 修复（N2, N5, 反倒退校验）的集中受益者。原本这是系统中最稳健的模块，修复后几乎无缺陷。<b>唯一保留的优化建议：</b>±5 分钟时间窗口（让 8:00 和 8:05 的角色也能相遇）——这是设计选择而非 bug。</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 E -->
+<!-- ============================================================ -->
+<h2 id="me">Node E：世界事件处理</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modE')">
+    <span class="module-id" style="background:#fbeaf0;color:#993556;">E</span>
+    <span class="module-title">process_pending_events() + auto_event</span>
+    <span class="module-grade" style="background:#e6f1fb;color:#185fa5;">B（↑ B→B+）</span>
+    <span class="chevron" id="chev-modE">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modE">
+
+    <div class="fix-detail">
+      <span class="label">P0 消费修复：</span>在 Step 2 之前构建 <span class="code-inline">char_affected_events</span> 索引（遍历 active_events 的 affected_characters 字段），intent 生成时传入 <span class="code-inline">affected_events</span> 参数。事件影响判定结果从"写入即忘"变为"被下游消费"。
+    </div>
+
+    <p style="font-size:13px; margin-top:8px;"><b>最显著的修复：</b>之前 _judge_event_impact() 调用了 LLM 但结果完全浪费。现在每个受影响角色收到的 intent prompt 包含差异化的事件上下文，直接解决了"所有角色看到同一份事件描述"的问题。</p>
+
+    <div class="issue-box">
+      <h4>⚠️ 仍存在的问题：玩家事件 importance 固定为 8</h4>
+      <p>所有玩家事件 importance=8（始终触发 cooldown）。这是设计选择而非 bug——玩家干预意味着"有大事发生"。但如果玩家快速连续添加多个事件，会连续触发 cooldown，节奏受影响。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 2 -->
+<!-- ============================================================ -->
+<h2 id="m2">Step 2：角色意图生成</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod2')">
+    <span class="module-id" style="background:#e6f1fb;color:#185fa5;">2</span>
+    <span class="module-title">_generate_character_intent()</span>
+    <span class="module-grade" style="background:#e1f5ee;color:#0f6e56;">A（↑ B→A）</span>
+    <span class="chevron" id="chev-mod2">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod2">
+
+    <div class="fix-detail">
+      <span class="label">P0 记忆检索修复：</span>新增 <span class="code-inline">_extract_query_keywords()</span> 方法，从 5 个维度自动提取关键词：<b>①</b> current_location <b>②</b> current_mood <b>③</b> recent_actions 的首词 <b>④</b> 关系密切角色名 <b>⑤</b> current_plan 的关键词。去重后限 15 个，传入 retrieve_memories()。
+    </div>
+
+    <div class="fix-detail">
+      <span class="label">P0 事件差异化：</span>intent prompt 现在接收 <span class="code-inline">affected_events</span> 参数，LLM 能根据角色是否受事件影响做出不同的行为反应。
+    </div>
+
+    <div class="fix-detail">
+      <span class="label">N6 修复：</span>character_action.py prompt 末尾追加 <span class="code-inline">{"role":"user","content":"请按照要求输出 JSON。"}</span>，提高 JSON 格式遵守率。
+    </div>
+
+    <p style="font-size:13px; margin-top:8px;"><b>最大改进模块：</b>Step 2 从"记忆纯靠重要性+近期性"变为"情境感知的记忆检索"，从"所有角色看到同一份事件"变为"差异化事件感知"。这是本轮修复中对叙事质量影响最大的两个变化。</p>
+
+    <div class="issue-box">
+      <h4>⚠️ 仍存在的问题：next_event 无上限校验</h4>
+      <p>防倒退校验只阻止 LLM 输出早于当前时间的事件。但 LLM 可能输出 72 小时后的 next_event——角色会"失踪"三天。不影响正确性但影响体验。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 3 -->
+<!-- ============================================================ -->
+<h2 id="m3">Step 3：世界模拟</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod3')">
+    <span class="module-id" style="background:#e1f5ee;color:#0f6e56;">3</span>
+    <span class="module-title">detect_encounters() + generate_dialogue()</span>
+    <span class="module-grade" style="background:#e6f1fb;color:#185fa5;">B（↑ C→B）</span>
+    <span class="chevron" id="chev-mod3">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod3">
+
+    <div class="fix-detail">
+      <span class="label">P0 关系闭环（对话 Δ）：</span>world_sim.py 的 prompt 增加了 <span class="code-inline">relationship_delta: {trust: int, affection: int}</span> 输出字段（范围 -10~+10）；story_engine.py Step 3 处理完对话后，遍历 dialogue_encounters 应用 trust_delta 和 affection_delta 到 relationship 模块。
+    </div>
+
+    <div class="fix-detail">
+      <span class="label">N4 修复：</span>asyncio.gather 的返回值被显式检查，对话生成异常不再静默吞没，而是记录 error 日志并设置兜底 outcome。
+    </div>
+
+    <div class="fix-detail">
+      <span class="label">N6 修复：</span>world_sim.py prompt 增加 user message trigger。</div>
+
+    <div class="analysis-section">
+      <div class="analysis-label">这修复了什么？</div>
+      <p style="font-size:13px;">
+      在第一轮报告中，Step 3 被评为 C 级（最差），主要因为<b>"关系数值只读不更新"</b>——这是整个系统最严重的设计缺陷。现在 relationship_delta 机制建立了关系更新的闭环：
+      </p>
+      <ul style="margin:4px 0 0 16px; font-size:12px;">
+        <li>对话 LLM 输出 trust/affection 变化量（由对话内容驱动）</li>
+        <li>Story  在 Step 3 处理对话后立即应用增量</li>
+        <li>下次碰撞检测时读到的是更新后的关系值 → 对话类型可能改变</li>
+        <li><b>关系矩阵从静态变成了动态的</b></li>
+      </ul>
+    </div>
+
+    <div class="issue-box severe">
+      <h4>🔴 新发现：dialogue_data 的存储方式有问题</h4>
+      <p>world_sim.py 中使用 <span class="code-inline">object.__setattr__(encounter, 'dialogue_data', result)</span> 将完整 LLM 结果附加到 Encounter 对象。但 <span class="code-inline">Encounter</span> 是 Pydantic BaseModel，这种方式绕过了 Pydantic 的验证机制。更严重的是，story_engine.py 中使用 <span class="code-inline">hasattr(enc, 'dialogue_data')</span> 来检测——如果一个 Encounter 是 Pydantic 反序列化出来的（从存档加载），它不会有这个动态属性，关系更新会静默失败。</p>
+      <p style="margin-top:4px;"><b>建议：</b>在 Encounter 模型中增加一个 <span class="code-inline">dialogue_data: Optional[dict] = None</span> 字段，或直接增加 <span class="code-inline">trust_delta: int = 0</span> 和 <span class="code-inline">affection_delta: int = 0</span> 字段。</p>
+    </div>
+
+    <div class="issue-box">
+      <h4>⚠️ 仍存在：碰撞硬阈值忽略情境</h4>
+      <p>_judge_encounter_type 仍然是纯阈值判定（trust > 70 → 对话），没有 mood/urgency 修正因子。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 A -->
+<!-- ============================================================ -->
+<h2 id="ma">弧追踪 + 叙事节奏判定</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modA')">
+    <span class="module-id" style="background:#faece7;color:#993c1d;">A</span>
+    <span class="module-title">Arc State Machine</span>
+    <span class="module-grade" style="background:#e1f5ee;color:#0f6e56;">A（↑ A→A+）</span>
+    <span class="chevron" id="chev-modA">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modA">
+
+    <div class="fix-detail">
+      <span class="label">N1 修复：</span>删除局部变量 <span class="code-inline">arc_state</span>，所有叙事模式判定统一从 <span class="code-inline">self.state.arc_state</span> 读取。cooldown→check 的转换不再有"快照 vs 当前状态"的时间差。
+    </div>
+
+    <div class="fix-detail">
+      <span class="label">N3 修复：</span>伏笔 buffer 消费从 FIFO 改为 recency 倒序（<span class="code-inline">sorted by -created_step</span>），最新伏笔先被注入叙事 prompt。
+    </div>
+
+    <p style="font-size:13px; margin-top:8px;"><b>评分解释：</b>A→A+ 的微小提升。弧状态机本身就是设计最好的模块，N1 修复消除了一个潜在的重构风险。N3 让伏笔消费顺序更合理（实际上 90% 的场景中 recency 和 FIFO 结果相同，但 recency 在边缘情况下正确）。</p>
+
+    <div class="issue-box">
+      <h4>⚠️ 仍存在：伏笔来源仍是 internal_thought</h4>
+      <p>消费顺序修复了，但伏笔内容仍是角色内心独白（"今天午饭吃什么"）——不是真正的叙事伏笔。<b>这是下一轮架构重构的候选。</b></p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 5 -->
+<!-- ============================================================ -->
+<h2 id="m5">叙事编排</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('mod5')">
+    <span class="module-id" style="background:#eeedfe;color:#534ab7;">5</span>
+    <span class="module-title">_generate_narrative_with_foreshadowing()</span>
+    <span class="module-grade" style="background:#e6f1fb;color:#185fa5;">B（↑ B→B+）</span>
+    <span class="chevron" id="chev-mod5">&#9654;</span>
+  </div>
+  <div class="module-body open" id="mod5">
+
+    <div class="fix-detail">
+      <span class="label">N6 修复：</span>narrative.py prompt 追加 user message trigger，显著提高 JSON 输出遵守率（特别是 <span class="code-inline">foreshadowing</span> 字段的覆盖率）。
+    </div>
+
+    <div class="issue-box">
+      <h4>⚠️ 仍存在：light_mode 未实际生效</h4>
+      <p>narrative_mode 参数传递了但 prompt 中没有差异化指令。full 和 light 调用的是同一套 prompt。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 模块 R -->
+<!-- ============================================================ -->
+<h2 id="mr">反思机制</h2>
+<div class="module-card">
+  <div class="module-header" onclick="toggle('modR')">
+    <span class="module-id" style="background:#f1efe8;color:#444441;">R</span>
+    <span class="module-title">_run_reflections()</span>
+    <span class="module-grade" style="background:#e6f1fb;color:#185fa5;">B（不变）</span>
+    <span class="chevron" id="chev-modR">&#9654;</span>
+  </div>
+  <div class="module-body open" id="modR">
+    <p style="font-size:13px;">反思模块未直接修改，但间接受益于：</p>
+    <ul style="margin:4px 0 0 16px; font-size:12px;">
+      <li>基于 narrative_step_count 的触发确保反思只发生在有叙事的时间步后</li>
+      <li>关系数值现在可以变化，反思生成的内容可能更丰富（因为角色经历了 real interactions）</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 仍存在的 6 个问题 -->
+<!-- ============================================================ -->
+<h2 id="remaining">仍存在的 6 个未修复问题</h2>
+
+<table class="compare-table">
+  <tr><th width="5%">级别</th><th>问题</th><th>影响</th><th>为什么没修？</th></tr>
+  <tr>
+    <td><span style="background:#fbeaf0;color:#993556;padding:1px 6px;border-radius:4px;font-size:10px;">P1</span></td>
+    <td><b>碰撞判定忽略情境修饰</b></td>
+    <td>角色愤怒时仍会对密友热情搭话。中低频率发生。</td>
+    <td>需要改 _judge_encounter_type 函数签名（增加 mood/urgency 参数），所有调用点都需要适配</td>
+  </tr>
+  <tr>
+    <td><span style="background:#faece7;color:#993c1d;padding:1px 6px;border-radius:4px;font-size:10px;">P1</span></td>
+    <td><b>精确匹配 → 相近时间无法互动</b></td>
+    <td>8:00 和 8:05 的角色永远不会相遇。中低频率发生。</td>
+    <td>需要改 _get_next_world_time + _get_active_characters 的逻辑，增加复杂度</td>
+  </tr>
+  <tr>
+    <td><span style="background:#faece7;color:#993c1d;padding:1px 6px;border-radius:4px;font-size:10px;">P1</span></td>
+    <td><b>light_mode 未实际生效</b></td>
+    <td>轻量叙事实际上生成的是完整叙事，浪费 token。</td>
+    <td>需要改 narrative prompt 模板，增加模式条件分支</td>
+  </tr>
+  <tr>
+    <td><span style="background:#faeeda;color:#854f0b;padding:1px 6px;border-radius:4px;font-size:10px;">P2</span></td>
+    <td><b>auto_event 固定间隔 12 步</b></td>
+    <td>高张力期间系统多干扰，平淡期推力不足。</td>
+    <td>需要引入 importance 移动平均和动态阈值，设计选择提前做</td>
+  </tr>
+  <tr>
+    <td><span style="background:#faeeda;color:#854f0b;padding:1px 6px;border-radius:4px;font-size:10px;">P2</span></td>
+    <td><b>LLM 并发无控制 (N8)</b></td>
+    <td>8 角色场景峰值 22 并发，可能触发限流。中频率发生。</td>
+    <td>简单改为 Semaphore(6) 即可，低风险</td>
+  </tr>
+  <tr>
+    <td><span style="background:#faeeda;color:#854f0b;padding:1px 6px;border-radius:4px;font-size:10px;">P2</span></td>
+    <td><b>add_player_event 双路径 (N9)</b></td>
+    <td>旧路径强制写入所有角色 schedule，与 per-agent 理念冲突。</td>
+    <td>需确认 Gradio UI 是否仍使用旧路径后方可废弃</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<!-- 修复引入的新问题 -->
+<!-- ============================================================ -->
+<h2 id="new">修复引入的 2 个新问题</h2>
+
+<div class="record-card">
+  <h4>🔴 新问题 1：dialogue_data 使用 object.__setattr__ 绕过 Pydantic</h4>
+  <p>
+  world_sim.py 第 142 行：
+  </p>
+  <p style="font-family:monospace;font-size:12px;background:#1a1a1a;color:#d3d1c7;padding:8px 12px;border-radius:6px;margin:6px 0;">
+  object.__setattr__(encounter, 'dialogue_data', result)
+  </p>
+  <p>
+  <b>问题：</b>Encounter 是 Pydantic BaseModel 实例。通过 <span class="code-inline">object.__setattr__</span> 设置属性绕过了 Pydantic 的类型验证、序列化和模型导出。在 story_engine.py 中通过 <span class="code-inline">hasattr(enc, 'dialogue_data')</span> 检测——如果 Encounter 是从存档反序列化出来的，这个属性不存在，关系更新会静默失败。
+  </p>
+  <p><b>风险：</b>存档/读档后关系数值不更新。</p>
+  <p><b>建议修复：</b>在 Encounter 模型中增加 <span class="code-inline">dialogue_data: Optional[dict] = Field(default=None, exclude=True)</span> 字段。</p>
+</div>
+
+<div class="record-card">
+  <h4>🟡 新问题 2：relationship_delta 的兜底路径为空</h4>
+  <p>
+  story_engine.py Step 3 处理 dialogue 后的关系更新代码：
+  </p>
+  <p style="font-family:monospace;font-size:12px;background:#1a1a1a;color:#d3d1c7;padding:8px 12px;border-radius:6px;margin:6px 0;">
+  if not delta and hasattr(enc, 'outcome'):<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;# 兜底：LLM 可能未返回 relationship_delta，尝试从对话结果推断<br>
+  &nbsp;&nbsp;&nbsp;&nbsp;continue  # ← 什么都没做！
+  </p>
+  <p>
+  <b>问题：</b>注释说"尝试从对话结果推断"，但代码实际是 <span class="code-inline">continue</span>——跳过该 encounter，不做任何关系更新。这意味着如果 LLM 在某次对话中没输出 relationship_delta，这次对话对关系的影响被完全丢失。
+  </p>
+  <p><b>建议：</b>要么实现启发式推断（从对话的 outcome 和 dialogue 内容中猜测情感方向），要么把 <span class="code-inline">relationship_delta</span> 设为 prompt 中的 required 字段（而非 optional），在 world_sim.py 解析时加 assertion。</p>
+</div>
+
+<!-- ============================================================ -->
+<!-- 总结 -->
+<!-- ============================================================ -->
+<h2>总结</h2>
+
+<p style="font-size:13px;">
+<b>本轮修复的核心成就是三个 P0 结构性缺陷的消除：</b>
+</p>
+<ul style="margin:4px 0 0 16px; font-size:13px;">
+  <li><b>关系闭环：</b>对话 LLM 输出 relationship_delta → world_sim 保存 → story_engine 应用 → 下次碰撞检测读到新值。这是从"静态关系"到"动态关系"的质变。</li>
+  <li><b>事件差异化：</b>affected_characters 从"写入即忘"变为下游消费，角色根据自己是否受影响做出不同反应。</li>
+  <li><b>情境感知记忆：</b>检索从纯时间/重要性变为 multi-factor（地点+心情+关系+计划），使记忆检索有了相关性维度。</li>
+</ul>
+
+<p style="font-size:13px; margin-top:12px;">
+<b>7 个代码级 bug（N1-N7）全部修复，</b>其中 N2（占用角色消失）和 N5（重复事件）是最危险的 bug，N4（静默异常）是最隐蔽的。反倒退校验（ANTI_REVERSE_MIN_MINUTES）为 LLM 输出的时间异常提供了系统级兜底。
+</p>
+
+<p style="font-size:13px; margin-top:12px;">
+<b>剩余 6 个问题按优先级分为两类：</b>
+</p>
+<ul style="margin:4px 0 0 16px; font-size:13px;">
+  <li><b>立即可修（低风险、小改动）：</b>N8 并发控制（加 1 个 Semaphore）、N9 双路径废弃（确认 UI 后删旧代码）、新问题 1 dialogue_data（加 1 个模型字段）</li>
+  <li><b>设计迭代（需要测试验证）：</b>碰撞情境修饰、时间窗口、light_mode 差异化、auto_event 动态间隔</li>
+</ul>
+
+<div class="verdict-bar" style="margin-top:16px;">
+  <div class="verdict-card" style="background:#f0effc;">
+    <div class="num" style="font-size:18px;color:#534ab7;">三个 P0 已消除</div>
+    <div class="label">关系闭环 · 事件差异化 · 情境记忆</div>
+  </div>
+  <div class="verdict-card" style="background:#e1f5ee;">
+    <div class="num" style="font-size:18px;color:#0f6e56;">七个 N1-N7 已修复</div>
+    <div class="label">代码 bug 全部消除</div>
+  </div>
+  <div class="verdict-card" style="background:#fdfaee;">
+    <div class="num" style="font-size:18px;color:#854f0b;">六个 P1/P2 待定</div>
+    <div class="label">设计优化 + 2 个新发现</div>
+  </div>
+</div>
+
+<p style="font-size:12px; color:#888780; margin-top:16px;">
+<b>最终评估：</b>系统从"看起来能动"进入"正确运行"。四层流水线架构的所有数据流链路现在都闭合了。叙事质量应该会有显著提升——因为角色之间的互动现在真的会改变它们的关系。下一步建议优先修 N8 + 新问题 1，然后跑一轮完整模拟验证。
+</p>
+
+</div>
+
+<script>
+function toggle(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  body.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+document.querySelectorAll('.module-body').forEach(el => el.classList.add('open'));
+document.querySelectorAll('.chevron').forEach(el => el.classList.add('open'));
+</script>
+</body>
+</html>
