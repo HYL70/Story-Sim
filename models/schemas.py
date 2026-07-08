@@ -47,12 +47,12 @@ class EventSource(str, Enum):
 class StorySetting(BaseModel):
     """故事世界设定"""
     title: str = Field(default="未命名故事", description="故事标题")
-    era: str = Field(default="架空古代", description="时代背景")
-    location: str = Field(default="皇宫", description="主要场景")
+    era: str = Field(default="现代中国", description="时代背景")
+    location: str = Field(default="校园", description="主要场景")
     description: str = Field(default="", description="背景描述（自由文本）")
-    tone: str = Field(default="暗流涌动", description="故事基调")
-    starting_date: str = Field(default="永平元年 春", description="故事起始时间（模糊描述，UI 显示用）")
-    starting_date_iso: str = Field(default="2024-10-05", description="故事起始精确日期（YYYY-MM-DD，用于 time_label）")
+    tone: str = Field(default="轻松日常", description="故事基调")
+    starting_date: str = Field(default="9月初", description="故事起始时间（模糊描述，UI 显示用）")
+    starting_date_iso: str = Field(default="2024-09-01", description="故事起始精确日期（YYYY-MM-DD，用于 time_label）")
 
 
 # ============================================================

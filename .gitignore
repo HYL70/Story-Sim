@@ -7,3 +7,14 @@ __pycache__/
 
 # runtime data
 data/saves/
+
+# audit and analysis files (keep only workflow-overview.html)
+output-problems.html
+content-quality-v2.html
+schedule-analysis.html
+skip-root-cause.html
+workflow-analysis-v3.html
+workflow-analysis.html
+workflow-audit-v2.html
+workflow-audit-v3.html
+workflow-audit.html
